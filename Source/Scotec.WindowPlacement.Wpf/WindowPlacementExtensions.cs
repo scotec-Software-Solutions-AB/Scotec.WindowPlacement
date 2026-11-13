@@ -44,18 +44,12 @@ public static class WindowPlacementExtensions
             throw new ArgumentException("Placement bounds must be positive.", nameof(placement));
         }
 
-        var fromDevice = source.CompositionTarget.TransformFromDevice;
-        var origin = fromDevice.Transform(new Point(bounds.X, bounds.Y));
-        var bottomRight = fromDevice.Transform(new Point(bounds.X + bounds.Width, bounds.Y + bounds.Height));
+        // The window's current HwndSource DPI may differ from the target monitor's DPI (for example a
+        // dialog created on a 150% monitor that is restored to a 100% monitor), so a DIP conversion with
+        // the current transform would be wrong. The exact physical outer bounds are applied natively;
+        // WPF then handles the resulting WM_DPICHANGED itself and keeps the pixel size.
         window.WindowStartupLocation = WindowStartupLocation.Manual;
-        window.WindowState = WindowState.Normal;
-        window.Left = origin.X;
-        window.Top = origin.Y;
-        window.Width = bottomRight.X - origin.X;
-        window.Height = bottomRight.Y - origin.Y;
-        if (placement.IsMaximized)
-        {
-            window.WindowState = WindowState.Maximized;
-        }
+        window.SizeToContent = SizeToContent.Manual;
+        new Win32WindowPlacementService().ApplyPlacement(source.Handle, placement);
     }
 }

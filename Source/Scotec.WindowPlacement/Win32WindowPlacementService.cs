@@ -189,17 +189,36 @@ public sealed class Win32WindowPlacementService : IWindowPlacementService
 		// Do not invoke framework APIs from this scope; call from the owning UI thread.
 		// Restore first to avoid moving a maximized window's full-screen visible rectangle.
 		NativeMethods.ShowWindow(hwnd, NativeMethods.SwShowNormal);
-		// The activation and Z order of the window are deliberately left untouched.
-		if (!NativeMethods.SetWindowPos(hwnd, 0,
-				Round(bounds.X), Round(bounds.Y), Round(bounds.Width), Round(bounds.Height),
-				NativeMethods.SwpNoActivate | NativeMethods.SwpNoZOrder))
+		// Moving a window to a monitor with a different DPI makes Windows send WM_DPICHANGED during
+		// SetWindowPos; per-monitor-aware frameworks then rescale the window from its old DPI, which
+		// can overwrite the size just set. Therefore the physical bounds are applied again once if the
+		// window DPI changed. One retry is enough because the DPI is stable after the first move.
+		var dpiBefore = NativeMethods.GetDpiForWindow(hwnd);
+		SetBounds(hwnd, bounds);
+		if (NativeMethods.GetDpiForWindow(hwnd) != dpiBefore)
 		{
-			throw NativeMethods.Error();
+			SetBounds(hwnd, bounds);
 		}
 
 		if (placement.IsMaximized)
 		{
 			NativeMethods.ShowWindow(hwnd, NativeMethods.SwShowMaximized);
+		}
+	}
+
+	/// <summary>
+	///     Sets the outer window rectangle in physical desktop pixels without changing activation or Z order.
+	/// </summary>
+	/// <param name="hwnd">Existing window handle.</param>
+	/// <param name="bounds">Valid physical outer bounds.</param>
+	/// <exception cref="System.ComponentModel.Win32Exception">SetWindowPos failed.</exception>
+	private static void SetBounds(nint hwnd, PlacementRect bounds)
+	{
+		if (!NativeMethods.SetWindowPos(hwnd, 0,
+				Round(bounds.X), Round(bounds.Y), Round(bounds.Width), Round(bounds.Height),
+				NativeMethods.SwpNoActivate | NativeMethods.SwpNoZOrder))
+		{
+			throw NativeMethods.Error();
 		}
 	}
 

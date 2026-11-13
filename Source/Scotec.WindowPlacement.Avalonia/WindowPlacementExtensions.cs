@@ -73,6 +73,16 @@ public static class WindowPlacementExtensions
 
         window.WindowStartupLocation = WindowStartupLocation.Manual;
         window.SizeToContent = SizeToContent.Manual;
+
+        // When the native window already exists, apply the exact physical outer bounds natively so that
+        // the DPI change of crossing monitors is handled once by the platform and not mis-scaled here.
+        if (window.TryGetPlatformHandle() is { } handle && handle.Handle != 0)
+        {
+            new Win32WindowPlacementService().ApplyPlacement(handle.Handle, placement);
+            return;
+        }
+
+        // No native window yet: use logical size from the destination monitor DPI.
         window.WindowState = WindowState.Normal;
         window.Position = new PixelPoint(x, y);
         window.Width = bounds.Width * 96.0 / dpiX;
