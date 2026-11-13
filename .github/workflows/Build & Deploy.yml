@@ -1,0 +1,317 @@
+name: Build & Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # Prerelease
+  #
+  # Manual build from develop.
+  #
+  # Azure federated credential:
+  #   Entity type: Branch
+  #   Branch: develop
+  #
+  # Do NOT specify a GitHub environment here.
+  # ---------------------------------------------------------------------------
+
+  prerelease:
+    name: Prerelease - Revit ${{ matrix.revitYear }}
+
+    if: github.ref == 'refs/heads/develop'
+
+    runs-on: windows-2025
+
+    strategy:
+      fail-fast: false
+      matrix:
+        revitYear: [2025, 2026, 2027]
+
+    steps: &build_steps
+
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v0.10.2
+      with:
+        versionSpec: '5.12.x'
+
+    - name: Determine Version
+      uses: gittools/actions/gitversion/execute@v0.10.2
+      with:
+        useConfigFile: true
+        configFilePath: GitVersion.yml
+
+    - name: Compute package version
+      shell: pwsh
+      run: |
+        $base = "${{ matrix.revitYear }}.$env:GITVERSION_MINOR.$env:GITVERSION_PATCH"
+        $pkgVersion = "$base$env:GITVERSION_PRERELEASETAGWITHDASH"
+
+        $revitConst = "REVIT${{ matrix.revitYear }}"
+
+        "PKG_VERSION=$pkgVersion" >> $env:GITHUB_ENV
+        "REVIT_CONST=$revitConst" >> $env:GITHUB_ENV
+
+        Write-Host "Git ref: $env:GITHUB_REF"
+        Write-Host "Revit year: ${{ matrix.revitYear }}"
+        Write-Host "Package version: $pkgVersion"
+        Write-Host "DefineConstants: $revitConst"
+        Write-Host "GitVersion SemVer: $env:GITVERSION_SEMVER"
+
+    - name: Setup .NET 8.0
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Restore dependencies
+      shell: pwsh
+      run: |
+        dotnet restore ./Source/Scotec.Revit.slnx `
+          -p:RevitYear="${{ matrix.revitYear }}" `
+          -p:DefineConstants="$env:REVIT_CONST"
+
+    # Build without creating NuGet packages.
+    # The assemblies must be signed before packaging.
+    - name: Build
+      shell: pwsh
+      run: |
+        dotnet build --no-restore ./Source/Scotec.Revit.slnx -c Release `
+          -p:CompanyName="scotec Software Solutions AB" `
+          -p:RevitYear="${{ matrix.revitYear }}" `
+          -p:DefineConstants="$env:REVIT_CONST" `
+          -p:Version="$env:PKG_VERSION" `
+          -p:PackageVersion="$env:PKG_VERSION" `
+          -p:InformationalVersion="$env:PKG_VERSION+$env:GITVERSION_SHA" `
+          -p:GeneratePackageOnBuild=false
+
+    # Authenticate to Azure using GitHub OIDC.
+    # No subscription-level role is required for this signing-only workflow.
+    - name: Azure login
+      uses: azure/login@v3
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        allow-no-subscriptions: true
+
+    # Find only the primary output assembly of each Scotec.Revit project.
+    #
+    # Example:
+    #   Scotec.Revit.csproj       -> Scotec.Revit.dll
+    #   Scotec.Revit.Ui.csproj    -> Scotec.Revit.Ui.dll
+    #   Scotec.Revit.Wpf.csproj   -> Scotec.Revit.Wpf.dll
+    #
+    # Referenced/copy-local assemblies such as Scotec.Extensions.* are
+    # deliberately excluded.
+    - name: Create signing file list
+      shell: pwsh
+      run: |
+        $sourceRoot = Join-Path $env:GITHUB_WORKSPACE "Source"
+
+        $projects = Get-ChildItem `
+          -Path $sourceRoot `
+          -Recurse `
+          -File `
+          -Filter "Scotec.Revit*.csproj"
+
+        if (-not $projects) {
+          throw "No Scotec.Revit projects were found."
+        }
+
+        $files = @()
+
+        foreach ($project in $projects) {
+          $projectName = [System.IO.Path]::GetFileNameWithoutExtension($project.Name)
+          $binDirectory = Join-Path $project.DirectoryName "bin"
+
+          if (-not (Test-Path $binDirectory)) {
+            Write-Host "Skipping $projectName - no bin directory found."
+            continue
+          }
+
+          # Primary project assemblies
+          $projectAssemblies = Get-ChildItem `
+            -Path $binDirectory `
+            -Recurse `
+            -File `
+            -Filter "$projectName.dll"
+
+          foreach ($assembly in $projectAssemblies) {
+            $files += $assembly
+          }
+
+          # Satellite resource assemblies belonging to this project
+          $resourceAssemblies = Get-ChildItem `
+            -Path $binDirectory `
+            -Recurse `
+            -File `
+            -Filter "$projectName.resources.dll"
+
+          foreach ($assembly in $resourceAssemblies) {
+            $files += $assembly
+          }
+        }
+
+        $files = $files |
+          Sort-Object FullName -Unique
+
+        if (-not $files) {
+          throw "No Scotec.Revit project assemblies were found for signing."
+        }
+
+        $catalog = Join-Path $env:GITHUB_WORKSPACE "signing-files.txt"
+
+        $files |
+          ForEach-Object {
+            [System.IO.Path]::GetRelativePath(
+              $env:GITHUB_WORKSPACE,
+              $_.FullName
+            )
+          } |
+          Set-Content $catalog
+
+        Write-Host ""
+        Write-Host "Files to sign:"
+        Get-Content $catalog
+    - name: Sign assemblies
+      uses: azure/artifact-signing-action@v2
+      with:
+        endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+        signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+        certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+        files-catalog: ${{ github.workspace }}\signing-files.txt
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+
+    - name: Verify signatures
+      shell: pwsh
+      run: |
+        $catalog = Join-Path $env:GITHUB_WORKSPACE "signing-files.txt"
+
+        foreach ($relativePath in Get-Content $catalog) {
+          $file = Join-Path $env:GITHUB_WORKSPACE $relativePath
+          $signature = Get-AuthenticodeSignature $file
+
+          Write-Host "$relativePath : $($signature.Status)"
+
+          if ($signature.Status -ne "Valid") {
+            throw "Invalid signature: $relativePath ($($signature.Status))"
+          }
+        }
+
+    # Package the already signed assemblies.
+    - name: Pack
+      shell: pwsh
+      run: |
+        dotnet pack --no-build ./Source/Scotec.Revit.slnx -c Release `
+          -p:CompanyName="scotec Software Solutions AB" `
+          -p:RevitYear="${{ matrix.revitYear }}" `
+          -p:DefineConstants="$env:REVIT_CONST" `
+          -p:Version="$env:PKG_VERSION" `
+          -p:PackageVersion="$env:PKG_VERSION" `
+          -p:InformationalVersion="$env:PKG_VERSION+$env:GITVERSION_SHA" `
+          -p:PackageOutputPath="$env:GITHUB_WORKSPACE\localPackages"
+
+    # Verify Scotec.Revit assemblies inside the generated NuGet packages.
+    - name: Verify package assemblies
+      shell: pwsh
+      run: |
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+        $packages = Get-ChildItem `
+          "$env:GITHUB_WORKSPACE\localPackages" `
+          -Filter "Scotec.Revit*.nupkg"
+
+        if (-not $packages) {
+          throw "No Scotec.Revit NuGet packages were created."
+        }
+
+        $verifiedAssemblies = 0
+
+        foreach ($package in $packages) {
+          Write-Host ""
+          Write-Host "Checking package: $($package.Name)"
+
+          $extractPath = Join-Path `
+            $env:RUNNER_TEMP `
+            ([System.IO.Path]::GetRandomFileName())
+
+          [System.IO.Compression.ZipFile]::ExtractToDirectory(
+            $package.FullName,
+            $extractPath
+          )
+
+          $assemblies = Get-ChildItem `
+            -Path $extractPath `
+            -Recurse `
+            -File `
+            -Filter "Scotec.Revit*.dll"
+
+          foreach ($assembly in $assemblies) {
+            $signature = Get-AuthenticodeSignature $assembly.FullName
+
+            Write-Host "  $($assembly.Name): $($signature.Status)"
+
+            if ($signature.Status -ne "Valid") {
+              throw "Invalid signature in $($package.Name): $($assembly.Name)"
+            }
+
+            $verifiedAssemblies++
+          }
+
+          Remove-Item $extractPath -Recurse -Force
+        }
+
+        if ($verifiedAssemblies -eq 0) {
+          throw "No Scotec.Revit assemblies were found in the generated NuGet packages."
+        }
+
+        Write-Host ""
+        Write-Host "Successfully verified $verifiedAssemblies signed assemblies."
+
+    - name: Push packages
+      shell: pwsh
+      run: |
+        dotnet nuget push "$env:GITHUB_WORKSPACE\localPackages\*.nupkg" `
+          -s https://api.nuget.org/v3/index.json `
+          -k "${{ secrets.NUGET_API_KEY }}" `
+          --skip-duplicate
+
+
+  # ---------------------------------------------------------------------------
+  # Release
+  #
+  # Manual build from a tag.
+  #
+  # Azure federated credential:
+  #   Entity type: Environment
+  #   Environment: release
+  #
+  # Every release tag uses the same OIDC identity.
+  # ---------------------------------------------------------------------------
+
+  release:
+    name: Release - Revit ${{ matrix.revitYear }}
+
+    if: startsWith(github.ref, 'refs/tags/')
+
+    runs-on: windows-2025
+
+    environment: release
+
+    strategy:
+      fail-fast: false
+      matrix:
+        revitYear: [2025, 2026, 2027]
+
+    steps: *build_steps

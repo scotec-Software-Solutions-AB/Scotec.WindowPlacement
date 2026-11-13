@@ -1,0 +1,21 @@
+<Solution>
+  <Folder Name="/SolutionItems/">
+    <File Path=".gitignore" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="GitVersion.yml" />
+    <File Path="NuGet.config" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/SolutionItems/.github/" />
+  <Folder Name="/SolutionItems/.github/workflows/">
+    <File Path="../.github/workflows/Build &amp; Deploy.yml" />
+    <File Path="../.github/workflows/Build.yml" />
+    <File Path="../.github/workflows/HidePrereleasePackages.yml" />
+  </Folder>
+  <Project Path="Samples/WindowPlacement.Sample.Wpf/WindowPlacement.Sample.Wpf.csproj" />
+  <Project Path="Scotec.WindowPlacement.Avalonia/Scotec.WindowPlacement.Avalonia.csproj" />
+  <Project Path="Scotec.WindowPlacement.Wpf/Scotec.WindowPlacement.Wpf.csproj" />
+  <Project Path="Scotec.WindowPlacement/Scotec.WindowPlacement.csproj" />
+  <Project Path="Tests/WindowPlacement.Tests/WindowPlacement.Tests.csproj" />
+</Solution>
