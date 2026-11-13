@@ -7,7 +7,7 @@ on:
         description: 'NuGet package ID or wildcard pattern'
         required: true
         type: string
-        default: 'scotec.revit.*'
+        default: 'Scotec.WindowPlacement.*'
       keep_latest:
         description: 'Keep latest prerelease version per package'
         required: true

@@ -22,16 +22,11 @@ jobs:
   # ---------------------------------------------------------------------------
 
   prerelease:
-    name: Prerelease - Revit ${{ matrix.revitYear }}
+    name: Prerelease
 
     if: github.ref == 'refs/heads/develop'
 
     runs-on: windows-2025
-
-    strategy:
-      fail-fast: false
-      matrix:
-        revitYear: [2025, 2026, 2027]
 
     steps: &build_steps
 
@@ -40,6 +35,8 @@ jobs:
       with:
         fetch-depth: 0
 
+    # Keep GitVersion 5 because this repository currently uses
+    # GitVersion 5-style configuration.
     - name: Install GitVersion
       uses: gittools/actions/gitversion/setup@v0.10.2
       with:
@@ -51,51 +48,69 @@ jobs:
         useConfigFile: true
         configFilePath: GitVersion.yml
 
-    - name: Compute package version
+    - name: Set package version
       shell: pwsh
       run: |
-        $base = "${{ matrix.revitYear }}.$env:GITVERSION_MINOR.$env:GITVERSION_PATCH"
-        $pkgVersion = "$base$env:GITVERSION_PRERELEASETAGWITHDASH"
+        $packageVersion = $env:GITVERSION_SEMVER
 
-        $revitConst = "REVIT${{ matrix.revitYear }}"
+        if ([string]::IsNullOrWhiteSpace($packageVersion)) {
+          throw "GitVersion did not provide GITVERSION_SEMVER."
+        }
 
-        "PKG_VERSION=$pkgVersion" >> $env:GITHUB_ENV
-        "REVIT_CONST=$revitConst" >> $env:GITHUB_ENV
+        "PKG_VERSION=$packageVersion" >> $env:GITHUB_ENV
 
         Write-Host "Git ref: $env:GITHUB_REF"
-        Write-Host "Revit year: ${{ matrix.revitYear }}"
-        Write-Host "Package version: $pkgVersion"
-        Write-Host "DefineConstants: $revitConst"
-        Write-Host "GitVersion SemVer: $env:GITVERSION_SEMVER"
+        Write-Host "Package version: $packageVersion"
+        Write-Host "GitVersion SHA: $env:GITVERSION_SHA"
 
-    - name: Setup .NET 8.0
+    # Install the SDKs used by the repository's current libraries.
+    # .NET 10 can also build projects targeting older supported TFMs,
+    # while .NET 8 is kept available for projects pinned to that SDK family.
+    - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
-        dotnet-version: 8.0.x
+        dotnet-version: |
+          8.0.x
+          10.0.x
+
+    - name: Locate solution
+      shell: pwsh
+      run: |
+        $solution = Get-ChildItem `
+          -Path "$env:GITHUB_WORKSPACE\Source" `
+          -Recurse `
+          -File |
+          Where-Object {
+            $_.Extension -in ".slnx", ".sln"
+          } |
+          Select-Object -First 1
+
+        if (-not $solution) {
+          throw "No solution file was found below Source."
+        }
+
+        "SOURCE_SOLUTION=$($solution.FullName)" >> $env:GITHUB_ENV
+        Write-Host "Solution: $($solution.FullName)"
 
     - name: Restore dependencies
       shell: pwsh
       run: |
-        dotnet restore ./Source/Scotec.Revit.slnx `
-          -p:RevitYear="${{ matrix.revitYear }}" `
-          -p:DefineConstants="$env:REVIT_CONST"
+        dotnet restore "$env:SOURCE_SOLUTION"
 
-    # Build without creating NuGet packages.
-    # The assemblies must be signed before packaging.
+    # Build first, but do not generate NuGet packages yet.
+    # The project assemblies must be signed before packaging.
     - name: Build
       shell: pwsh
       run: |
-        dotnet build --no-restore ./Source/Scotec.Revit.slnx -c Release `
+        dotnet build --no-restore "$env:SOURCE_SOLUTION" -c Release `
           -p:CompanyName="scotec Software Solutions AB" `
-          -p:RevitYear="${{ matrix.revitYear }}" `
-          -p:DefineConstants="$env:REVIT_CONST" `
           -p:Version="$env:PKG_VERSION" `
           -p:PackageVersion="$env:PKG_VERSION" `
           -p:InformationalVersion="$env:PKG_VERSION+$env:GITVERSION_SHA" `
           -p:GeneratePackageOnBuild=false
 
-    # Authenticate to Azure using GitHub OIDC.
-    # No subscription-level role is required for this signing-only workflow.
+    # Authenticate to Azure through GitHub OIDC.
+    # The service principal only needs Artifact Signing permissions.
     - name: Azure login
       uses: azure/login@v3
       with:
@@ -103,72 +118,124 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         allow-no-subscriptions: true
 
-    # Find only the primary output assembly of each Scotec.Revit project.
+    # Find packable Scotec projects and select only their own output assemblies.
     #
     # Example:
-    #   Scotec.Revit.csproj       -> Scotec.Revit.dll
-    #   Scotec.Revit.Ui.csproj    -> Scotec.Revit.Ui.dll
-    #   Scotec.Revit.Wpf.csproj   -> Scotec.Revit.Wpf.dll
+    #   Scotec.Extensions.Linq.csproj -> Scotec.Extensions.Linq.dll
     #
-    # Referenced/copy-local assemblies such as Scotec.Extensions.* are
-    # deliberately excluded.
+    # Copy-local dependencies from referenced packages/projects are not selected.
+    # Satellite resource assemblies belonging to those projects are included.
     - name: Create signing file list
       shell: pwsh
       run: |
+        function Get-MsBuildProperty {
+          param(
+            [string] $Project,
+            [string] $Property
+          )
+
+          $output = & dotnet msbuild "$Project" --nologo "-getProperty:$Property" 2>&1
+
+          if ($LASTEXITCODE -ne 0) {
+            $output | ForEach-Object { Write-Host $_ }
+            throw "Could not read MSBuild property '$Property' from '$Project'."
+          }
+
+          $value = $output |
+            ForEach-Object { "$_".Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Select-Object -Last 1
+
+          return "$value".Trim()
+        }
+
         $sourceRoot = Join-Path $env:GITHUB_WORKSPACE "Source"
 
         $projects = Get-ChildItem `
           -Path $sourceRoot `
           -Recurse `
           -File `
-          -Filter "Scotec.Revit*.csproj"
+          -Filter "*.csproj"
 
         if (-not $projects) {
-          throw "No Scotec.Revit projects were found."
+          throw "No projects were found below Source."
         }
 
         $files = @()
+        $ownedAssemblyNames = @()
+        $packableProjects = @()
 
         foreach ($project in $projects) {
-          $projectName = [System.IO.Path]::GetFileNameWithoutExtension($project.Name)
-          $binDirectory = Join-Path $project.DirectoryName "bin"
+          $isPackable = Get-MsBuildProperty `
+            -Project $project.FullName `
+            -Property "IsPackable"
 
-          if (-not (Test-Path $binDirectory)) {
-            Write-Host "Skipping $projectName - no bin directory found."
+          if ($isPackable -ne "true") {
             continue
           }
 
-          # Primary project assemblies
+          $assemblyName = Get-MsBuildProperty `
+            -Project $project.FullName `
+            -Property "AssemblyName"
+
+          if ([string]::IsNullOrWhiteSpace($assemblyName)) {
+            continue
+          }
+
+          # This repository contains scotec libraries; do not sign unrelated
+          # helper/test projects that may happen to be packable.
+          if (-not $assemblyName.StartsWith("Scotec.", [System.StringComparison]::OrdinalIgnoreCase)) {
+            continue
+          }
+
+          $binDirectory = Join-Path $project.DirectoryName "bin"
+
+          if (-not (Test-Path $binDirectory)) {
+            Write-Host "Skipping $assemblyName - no bin directory found."
+            continue
+          }
+
           $projectAssemblies = Get-ChildItem `
             -Path $binDirectory `
             -Recurse `
             -File `
-            -Filter "$projectName.dll"
+            -Filter "$assemblyName.dll"
 
-          foreach ($assembly in $projectAssemblies) {
-            $files += $assembly
-          }
-
-          # Satellite resource assemblies belonging to this project
           $resourceAssemblies = Get-ChildItem `
             -Path $binDirectory `
             -Recurse `
             -File `
-            -Filter "$projectName.resources.dll"
+            -Filter "$assemblyName.resources.dll"
 
-          foreach ($assembly in $resourceAssemblies) {
-            $files += $assembly
+          if (-not $projectAssemblies) {
+            Write-Host "No build output found for packable project $assemblyName."
+            continue
           }
+
+          $files += $projectAssemblies
+          $files += $resourceAssemblies
+
+          $ownedAssemblyNames += $assemblyName
+          $packableProjects += $project.FullName
         }
 
         $files = $files |
+          Where-Object { $_ -ne $null } |
           Sort-Object FullName -Unique
 
+        $ownedAssemblyNames = $ownedAssemblyNames |
+          Sort-Object -Unique
+
+        $packableProjects = $packableProjects |
+          Sort-Object -Unique
+
         if (-not $files) {
-          throw "No Scotec.Revit project assemblies were found for signing."
+          throw "No packable Scotec assemblies were found for signing."
         }
 
         $catalog = Join-Path $env:GITHUB_WORKSPACE "signing-files.txt"
+        $assemblyNamesFile = Join-Path $env:GITHUB_WORKSPACE "owned-assembly-names.txt"
+        $projectsFile = Join-Path $env:GITHUB_WORKSPACE "packable-projects.txt"
 
         $files |
           ForEach-Object {
@@ -179,9 +246,17 @@ jobs:
           } |
           Set-Content $catalog
 
+        $ownedAssemblyNames | Set-Content $assemblyNamesFile
+        $packableProjects | Set-Content $projectsFile
+
         Write-Host ""
-        Write-Host "Files to sign:"
+        Write-Host "Packable projects:"
+        Get-Content $projectsFile
+
+        Write-Host ""
+        Write-Host "Assemblies to sign:"
         Get-Content $catalog
+
     - name: Sign assemblies
       uses: azure/artifact-signing-action@v2
       with:
@@ -209,32 +284,56 @@ jobs:
           }
         }
 
-    # Package the already signed assemblies.
+    # Pack each project that was identified as a packable Scotec library.
+    # --no-build guarantees that the signed DLLs are used.
     - name: Pack
       shell: pwsh
       run: |
-        dotnet pack --no-build ./Source/Scotec.Revit.slnx -c Release `
-          -p:CompanyName="scotec Software Solutions AB" `
-          -p:RevitYear="${{ matrix.revitYear }}" `
-          -p:DefineConstants="$env:REVIT_CONST" `
-          -p:Version="$env:PKG_VERSION" `
-          -p:PackageVersion="$env:PKG_VERSION" `
-          -p:InformationalVersion="$env:PKG_VERSION+$env:GITVERSION_SHA" `
-          -p:PackageOutputPath="$env:GITHUB_WORKSPACE\localPackages"
+        $packageDirectory = Join-Path $env:GITHUB_WORKSPACE "localPackages"
 
-    # Verify Scotec.Revit assemblies inside the generated NuGet packages.
+        New-Item `
+          -Path $packageDirectory `
+          -ItemType Directory `
+          -Force | Out-Null
+
+        $projectsFile = Join-Path $env:GITHUB_WORKSPACE "packable-projects.txt"
+
+        foreach ($project in Get-Content $projectsFile) {
+          Write-Host ""
+          Write-Host "Packing: $project"
+
+          dotnet pack --no-build "$project" -c Release `
+            -p:CompanyName="scotec Software Solutions AB" `
+            -p:Version="$env:PKG_VERSION" `
+            -p:PackageVersion="$env:PKG_VERSION" `
+            -p:InformationalVersion="$env:PKG_VERSION+$env:GITVERSION_SHA" `
+            -p:PackageOutputPath="$packageDirectory"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packing failed for '$project'."
+          }
+        }
+
+    # Verify that the project-owned assemblies inside the generated NuGet
+    # packages still carry valid Authenticode signatures.
     - name: Verify package assemblies
       shell: pwsh
       run: |
         Add-Type -AssemblyName System.IO.Compression.FileSystem
 
+        $packageDirectory = Join-Path $env:GITHUB_WORKSPACE "localPackages"
+
         $packages = Get-ChildItem `
-          "$env:GITHUB_WORKSPACE\localPackages" `
-          -Filter "Scotec.Revit*.nupkg"
+          -Path $packageDirectory `
+          -File `
+          -Filter "*.nupkg"
 
         if (-not $packages) {
-          throw "No Scotec.Revit NuGet packages were created."
+          throw "No NuGet packages were created."
         }
+
+        $ownedAssemblyNames = Get-Content `
+          (Join-Path $env:GITHUB_WORKSPACE "owned-assembly-names.txt")
 
         $verifiedAssemblies = 0
 
@@ -251,13 +350,27 @@ jobs:
             $extractPath
           )
 
-          $assemblies = Get-ChildItem `
+          $packageDlls = Get-ChildItem `
             -Path $extractPath `
             -Recurse `
             -File `
-            -Filter "Scotec.Revit*.dll"
+            -Filter "*.dll"
 
-          foreach ($assembly in $assemblies) {
+          foreach ($assembly in $packageDlls) {
+            $isOwnedAssembly = $false
+
+            foreach ($assemblyName in $ownedAssemblyNames) {
+              if ($assembly.Name -ieq "$assemblyName.dll" -or
+                  $assembly.Name -ieq "$assemblyName.resources.dll") {
+                $isOwnedAssembly = $true
+                break
+              }
+            }
+
+            if (-not $isOwnedAssembly) {
+              continue
+            }
+
             $signature = Get-AuthenticodeSignature $assembly.FullName
 
             Write-Host "  $($assembly.Name): $($signature.Status)"
@@ -273,11 +386,11 @@ jobs:
         }
 
         if ($verifiedAssemblies -eq 0) {
-          throw "No Scotec.Revit assemblies were found in the generated NuGet packages."
+          throw "No project-owned assemblies were found in the generated NuGet packages."
         }
 
         Write-Host ""
-        Write-Host "Successfully verified $verifiedAssemblies signed assemblies."
+        Write-Host "Successfully verified $verifiedAssemblies signed package assemblies."
 
     - name: Push packages
       shell: pwsh
@@ -301,17 +414,12 @@ jobs:
   # ---------------------------------------------------------------------------
 
   release:
-    name: Release - Revit ${{ matrix.revitYear }}
+    name: Release
 
     if: startsWith(github.ref, 'refs/tags/')
 
     runs-on: windows-2025
 
     environment: release
-
-    strategy:
-      fail-fast: false
-      matrix:
-        revitYear: [2025, 2026, 2027]
 
     steps: *build_steps
