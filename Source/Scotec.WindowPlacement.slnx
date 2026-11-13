@@ -13,6 +13,7 @@
     <File Path="../.github/workflows/Build.yml" />
     <File Path="../.github/workflows/HidePrereleasePackages.yml" />
   </Folder>
+  <Project Path="Samples/WindowPlacement.Sample.Avalonia/WindowPlacement.Sample.Avalonia.csproj" />
   <Project Path="Samples/WindowPlacement.Sample.Wpf/WindowPlacement.Sample.Wpf.csproj" />
   <Project Path="Scotec.WindowPlacement.Avalonia/Scotec.WindowPlacement.Avalonia.csproj" />
   <Project Path="Scotec.WindowPlacement.Wpf/Scotec.WindowPlacement.Wpf.csproj" />

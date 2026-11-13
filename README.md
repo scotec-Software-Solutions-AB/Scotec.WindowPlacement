@@ -28,25 +28,26 @@ Resizable windows are reduced to fit the target working area, respecting provide
 ## Important Windows / framework limitations
 
 1. **DPI contexts (updated)**: `Win32MonitorProvider.GetMonitors()`, `Win32WindowPlacementService.GetCurrentPlacement()` and `ApplyPlacement()` each enter a **temporary per-monitor-V2 DPI-aware thread context** (falling back to per-monitor V1 where required), and restore the exact previous thread context in `Dispose()`/`finally` semantics. A failed switch throws rather than using inaccurate virtualized coordinates. The code does **not** modify Revit's or any other host's process DPI awareness, nor the awareness of existing HWNDs. No asynchronous operations occur inside the scope. `GetDpiForWindow` remains informational: a system-aware HWND can report system DPI even on another monitor. **Important:** `ApplyPlacement` uses `ShowWindow` and `SetWindowPos`, which can deliver native messages synchronously while the temporary context is active. The implementation does not call WPF/Avalonia APIs during the scope; test with your host's UI lifecycle and prefer framework adapters if the native message behavior is problematic. Requires Windows 10+.
-2. **WPF adapter**: WPF `Left`, `Top`, `Width` and `Height` use DIPs, and `HwndSource.CompositionTarget.TransformFromDevice` reflects the *current* HwndSource DPI. If a window is created on one DPI and restored to a different-DPI monitor, WPF may recalculate its DPI/layout after it moves. This adapter is best effort and may require post-move corrections for precise physical geometry. The core `ApplyPlacement(hwnd, ...)` avoids framework property conversions for precise outer-frame placement, subject to DPI awareness.
+2. **WPF adapter**: the window's current `HwndSource` DPI can differ from the DPI of the monitor the placement resolves to (for example a dialog created on a 150% monitor and restored to a 100% monitor), so converting physical pixels to DIPs with the current transform gives a wrong size. The WPF adapter therefore does not convert; it applies the exact physical outer bounds through the core `ApplyPlacement(hwnd, ...)`, which re-applies them once if the window DPI changed during the move. A 150% / 100% setup was verified manually; this is not covered by automated tests.
 3. **Normal rectangle**: `GetWindowPlacement` stores `rcNormalPosition` in workspace coordinates for ordinary top-level windows. The native implementation maps that to screen coordinates using the monitor work-area offset. Customized tool windows with `WS_EX_TOOLWINDOW`, or apps that control their own placement, may require a different handling strategy. Test maximized windows when deploying in a real host.
 4. **Window size constraints**: A `WS_THICKFRAME` style is a heuristic for resizability. It does not report application-specific `WM_GETMINMAXINFO` constraints, so optionally pass `WindowSizeConstraints` (minimum width/height in DIPs). For nonstandard custom chrome, the caller may need to override style-based assumptions.
-5. **Outer versus WPF dimensions**: Native placement is an outer-window rectangle. WPF framework sizing or custom chrome can produce a slightly different outer rectangle, and Windows may constrain size; the WPF sample is a demonstration, not a guarantee of pixel-exact restoration.
+5. **Outer versus client dimensions**: Native placement is an outer-window rectangle (title bar and borders included). The WPF adapter applies it natively. Avalonia `Width`/`Height` are client sizes, so the Avalonia adapter applies the outer bounds natively after the window has opened and then pins `Width`/`Height` to the resulting client size; otherwise the window would grow by its frame size on every restore. Windows may still constrain the size.
 6. **Display identity**: Monitor snapshots now optionally include the Windows monitor interface path obtained with `EnumDisplayDevicesW(..., EDD_GET_DEVICE_INTERFACE_NAME)`. The resolver prefers a unique matching interface path before GDI display names, rejecting name-only matches when both identities are present but conflict. Otherwise it uses geometric proximity, breaking ties in favor of the primary monitor. Interface paths are not guaranteed persistent for RDP, virtual monitors, driver changes or hardware replacement; geometry remains the fallback. Older serialized snapshots without the optional property remain readable.
 7. **Persistence**: The sample saves on `Closing`, suppresses persistence errors, and uses a temp file plus an overwrite move on the same volume. It does not update placement continuously or react to live monitor disconnects while a modal dialog is open. Multi-instance concurrent writes to the same file are not coordinated.
 8. **UI thread**: Native windows must be accessed/modified from the window's owning UI thread. Restore after HWND creation, ideally before the window becomes visible; do not block the UI thread waiting for a modal dialog.
-9. **Windows only**: This is an HWND-based component, not a cross-platform display abstraction. The Win32 service and both framework adapters throw `PlatformNotSupportedException` when invoked outside Windows. The target framework is `net8.0-windows`. Avalonia on Windows can use its platform HWND handle with the core service and the Avalonia extension to apply the resulting placement.
+9. **Windows only**: This is an HWND-based component, not a cross-platform display abstraction. The Win32 service and both framework adapters throw `PlatformNotSupportedException` when invoked outside Windows. The target frameworks are `net8.0-windows` and `net10.0-windows`. Avalonia on Windows can use its platform HWND handle with the core service and the Avalonia extension to apply the resulting placement.
 
 ## Run on Windows
 
 Open `WindowPlacementSolution.sln` with Visual Studio 2022 (with .NET desktop development) or run:
 
 ```powershell
-dotnet run --project samples/WindowPlacement.Sample.Wpf
+dotnet run --project Source/Samples/WindowPlacement.Sample.Wpf
+dotnet run --project Source/Samples/WindowPlacement.Sample.Avalonia
 dotnet run --project tests/WindowPlacement.Tests
 ```
 
-The sample is intentionally dependency-free apart from .NET Desktop. No build was performed in the artifact creation environment.
+The WPF sample depends only on .NET Desktop; the Avalonia sample uses Avalonia 11.3.22. Both persist a dialog placement as JSON beneath `%LOCALAPPDATA%\Scotec`.
 
 
 ## Avalonia integration
@@ -62,18 +63,22 @@ ResolvedWindowPlacement resolved = placementService.GetPlacement(saved);
 resolved.ApplyTo(avaloniaWindow);
 ```
 
-`ApplyTo` uses the public Avalonia `Window` API. `Window.Position` is set directly
-from the absolute physical-pixel coordinates; `Width` and `Height` are converted
-from physical pixels to DIPs using the selected monitor's DPI. The adapter also
-sets manual startup positioning and manual size-to-content, and restores maximized
-state as needed. Call on the Avalonia UI thread after the platform handle exists,
-ideally before showing the window.
+`ApplyTo` uses the public Avalonia `Window` API plus the core native `ApplyPlacement`.
+`Window.Position` is set from the absolute physical-pixel coordinates, and `Width`
+and `Height` are first set from the physical outer size converted with the
+destination monitor's DPI (an estimate, because Avalonia sizes are client sizes).
+The adapter also sets manual startup positioning and manual size-to-content.
+Avalonia re-applies `Width`/`Height` while showing the window, so the exact outer
+bounds are applied natively once the window has opened (posted behind the initial
+layout pass); afterwards `Width`/`Height` are pinned to the resulting client size
+so that the window does not grow on later restores. The maximized state is restored
+by the native apply. Call on the Avalonia UI thread, preferably before showing the
+window.
 
-As with WPF, Avalonia's logical Width and Height are not guaranteed to exactly
-match the native outer window bounds when non-client decorations are involved.
-For pixel-exact native outer bounds, use the core HWND `ApplyPlacement` instead.
-The adapter has not been build- or runtime-tested here. Verify behavior with
-per-monitor DPI changes and when Avalonia is hosted by Revit.
+The result was confirmed manually on a 150% / 100% two-monitor setup; there are no
+automated adapter tests. Verify behavior with other DPI combinations and when
+Avalonia is hosted by Revit. A brief flash at the estimated size before the window
+has opened is possible.
 
 ## Naming and supported platforms
 
@@ -83,7 +88,7 @@ The three reusable library projects are `Scotec.WindowPlacement`, `Scotec.Window
 
 - A thread-local DPI change by itself does not repaint windows. Applying a new placement *does* move or size the HWND, which can invoke repaint and layout.
 - The native query APIs run in a per-monitor context to obtain consistent physical desktop pixels even under a system-DPI-aware Revit process. Monitor snapshots have effective DPI from `GetDpiForMonitor` under that same context.
-- The WPF/Avalonia adapters still use their framework APIs **after** native DPI scopes have been restored. Mixed DPI movement remains framework-dependent; a WPF source's current DPI can differ from the destination DPI until its window moves. Test on a real multi-monitor Revit installation.
+- The WPF/Avalonia adapters call ApplyPlacement (which enters and leaves its own short DPI scope) and framework APIs **outside** any native DPI scope. ApplyPlacement re-applies the physical bounds once if the window DPI changed during the move. Test on a real multi-monitor Revit installation.
 - Monitor identity remains best-effort. `GetWindowPlacement` workspace conversion and nonstandard window chrome should be validated with taskbars on secondary monitors.
 - The tests include pure geometry smoke tests plus a Windows-only check that monitor enumeration restores the original thread DPI-awareness context. No WPF/Avalonia/Revit runtime integration tests or compilation were performed.
 

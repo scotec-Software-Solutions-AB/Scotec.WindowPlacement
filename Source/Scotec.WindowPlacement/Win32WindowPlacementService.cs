@@ -188,7 +188,14 @@ public sealed class Win32WindowPlacementService : IWindowPlacementService
 		// SetWindowPos and ShowWindow can synchronously deliver native window messages.
 		// Do not invoke framework APIs from this scope; call from the owning UI thread.
 		// Restore first to avoid moving a maximized window's full-screen visible rectangle.
-		NativeMethods.ShowWindow(hwnd, NativeMethods.SwShowNormal);
+		// A hidden window (for example during WPF SourceInitialized) must stay hidden: ShowWindow would make
+		// it visible before the framework has rendered its content, which is seen as black content for a
+		// moment. SetWindowPos with SWP_NOACTIVATE does not change the visibility.
+		var wasVisible = NativeMethods.IsWindowVisible(hwnd);
+		if (wasVisible)
+		{
+			NativeMethods.ShowWindow(hwnd, NativeMethods.SwShowNormal);
+		}
 		// Moving a window to a monitor with a different DPI makes Windows send WM_DPICHANGED during
 		// SetWindowPos; per-monitor-aware frameworks then rescale the window from its old DPI, which
 		// can overwrite the size just set. Therefore the physical bounds are applied again once if the

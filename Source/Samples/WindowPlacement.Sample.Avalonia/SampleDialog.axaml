@@ -1,0 +1,15 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="WindowPlacement.Sample.Avalonia.SampleDialog"
+        Title="Movable dialog" Width="530" Height="320" MinWidth="360" MinHeight="220"
+        WindowStartupLocation="CenterOwner" CanResize="True">
+    <DockPanel Margin="20">
+        <Button Content="Close" DockPanel.Dock="Bottom" Width="100" Height="30" HorizontalAlignment="Right"
+                Margin="0,20,0,0" Click="Close_Click" />
+        <StackPanel>
+            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Move and resize this dialog" />
+            <TextBlock Margin="0,14,0,0" TextWrapping="Wrap"
+                       Text="Its placement is captured from the native HWND when closing. On the next opening, the saved monitor-relative position is resolved against the available monitors and applied before the dialog is shown." />
+        </StackPanel>
+    </DockPanel>
+</Window>

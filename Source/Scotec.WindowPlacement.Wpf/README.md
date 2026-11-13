@@ -1,6 +1,6 @@
 # Scotec.WindowPlacement.Wpf
 
-WPF adapter for `Scotec.WindowPlacement`. It adds one extension method, `ResolvedWindowPlacement.ApplyTo(Window)`, which converts a resolved placement into WPF window properties.
+which applies a resolved placement to a WPF window by setting its exact physical outer bounds natively.
 
 ## Usage
 
@@ -26,8 +26,8 @@ public MyDialog()
 
 ## Behavior
 
-- Input is `ResolvedWindowPlacement.BoundsPixels` (absolute physical screen pixels). Output is WPF `Left`, `Top`, `Width` and `Height` in DIPs, converted with the window's `HwndSource.CompositionTarget.TransformFromDevice`.
-- Sets `WindowStartupLocation.Manual`, assigns the normal bounds with `WindowState.Normal`, then maximizes if `IsMaximized` is set.
+- Input is `ResolvedWindowPlacement.BoundsPixels` (absolute physical screen pixels). No DIP conversion is done: the window's current `HwndSource` DPI can differ from the destination monitor's DPI (for example a dialog created on a 150% monitor and restored to a 100% monitor), which would produce a wrong size.
+- Sets `WindowStartupLocation.Manual` and `SizeToContent.Manual`, then calls `IWindowPlacementService.ApplyPlacement` on the window handle. That restores the normal bounds with `SetWindowPos`, re-applies them once if the window DPI changed during the move, and maximizes if `IsMaximized` is set.
 
 ## Requirements and exceptions
 
@@ -39,6 +39,6 @@ public MyDialog()
 
 ## Limitations
 
-- The conversion uses the window's current DPI. If the window moves to a monitor with a different DPI, WPF may re-layout afterwards, so the result is best effort in mixed-DPI setups.
-- The restored size is a WPF window size, and non-client chrome can cause small differences from the native outer rectangle. Use `IWindowPlacementService.ApplyPlacement` when exact outer bounds matter.
-- Mixed-DPI and multi-monitor behavior has not been verified by automated tests and needs manual verification on Windows.
+- WPF `Left`, `Top`, `Width` and `Height` are updated by WPF in response to the native move, so they may briefly lag behind the native bounds.
+- The native call runs synchronously and can deliver window messages (such as `WM_DPICHANGED`) while it executes; call it on the window's UI thread.
+- A 150% / 100% two-monitor setup was verified manually; mixed-DPI and multi-monitor behavior is not covered by automated tests.

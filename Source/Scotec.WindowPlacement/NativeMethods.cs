@@ -260,6 +260,13 @@ internal static class NativeMethods
 	[DllImport("shcore.dll")]
 	internal static extern int GetDpiForMonitor(nint monitor, int dpiType, out uint dpiX, out uint dpiY);
 
+	/// <summary>Returns whether the window has the WS_VISIBLE style (it is not hidden).</summary>
+	/// <param name="hwnd">Window handle.</param>
+	/// <returns>True if the window and all of its parents are visible.</returns>
+	[DllImport("user32.dll")]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	internal static extern bool IsWindowVisible(nint hwnd);
+
 	/// <summary>Returns whether the handle identifies an existing window.</summary>
 	/// <param name="hwnd">Window handle.</param>
 	/// <returns>True if the window exists.</returns>

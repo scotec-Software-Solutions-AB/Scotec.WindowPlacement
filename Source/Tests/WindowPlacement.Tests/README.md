@@ -29,7 +29,7 @@ On success it prints `All placement resolver and DPI context checks passed.`
 These need Windows integration or manual verification:
 
 - Real HWND capture and `ApplyPlacement`.
-- WPF and Avalonia adapter behavior.
+- WPF and Avalonia adapter behavior (native apply, Opened/Loaded deferral, client-size pinning); only checked manually with the samples.
 - Real multi-monitor, mixed-DPI, RDP or VM topologies.
 - Maximized-state restore on real windows.
 - Negative virtual-screen origins and maximized saved data have no dedicated resolver cases yet; consider adding them.
