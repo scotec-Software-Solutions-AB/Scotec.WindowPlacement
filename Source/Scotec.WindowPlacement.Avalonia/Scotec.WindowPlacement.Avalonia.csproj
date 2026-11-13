@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <ProjectReference Include="../Scotec.WindowPlacement/Scotec.WindowPlacement.csproj" />
+  </ItemGroup>
+</Project>
