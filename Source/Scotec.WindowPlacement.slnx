@@ -1,9 +1,4 @@
 <Solution>
-  <Configurations>
-    <BuildType Name="Debug" />
-    <BuildType Name="Release" />
-    <Platform Name="x64" />
-  </Configurations>
   <Folder Name="/SolutionItems/">
     <File Path=".gitignore" />
     <File Path="Directory.Build.props" />
@@ -18,19 +13,9 @@
     <File Path="../.github/workflows/Build.yml" />
     <File Path="../.github/workflows/HidePrereleasePackages.yml" />
   </Folder>
-  <Project Path="Samples/WindowPlacement.Sample.Wpf/WindowPlacement.Sample.Wpf.csproj">
-    <Platform Solution="*|x64" Project="x64" />
-  </Project>
-  <Project Path="Scotec.WindowPlacement.Avalonia/Scotec.WindowPlacement.Avalonia.csproj">
-    <Platform Solution="*|x64" Project="x64" />
-  </Project>
-  <Project Path="Scotec.WindowPlacement.Wpf/Scotec.WindowPlacement.Wpf.csproj">
-    <Platform Solution="*|x64" Project="x64" />
-  </Project>
-  <Project Path="Scotec.WindowPlacement/Scotec.WindowPlacement.csproj">
-    <Platform Solution="*|x64" Project="x64" />
-  </Project>
-  <Project Path="Tests/WindowPlacement.Tests/WindowPlacement.Tests.csproj">
-    <Platform Solution="*|x64" Project="x64" />
-  </Project>
+  <Project Path="Samples/WindowPlacement.Sample.Wpf/WindowPlacement.Sample.Wpf.csproj" />
+  <Project Path="Scotec.WindowPlacement.Avalonia/Scotec.WindowPlacement.Avalonia.csproj" />
+  <Project Path="Scotec.WindowPlacement.Wpf/Scotec.WindowPlacement.Wpf.csproj" />
+  <Project Path="Scotec.WindowPlacement/Scotec.WindowPlacement.csproj" />
+  <Project Path="Tests/WindowPlacement.Tests/WindowPlacement.Tests.csproj" />
 </Solution>
