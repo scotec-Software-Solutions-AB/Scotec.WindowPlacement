@@ -4,7 +4,7 @@ namespace Scotec.WindowPlacement;
 /// topology or DPI changes, and optionally applies a placement to an HWND. All persistent geometry
 /// is work-area-relative and measured in DIPs; resolved geometry is measured in physical pixels.
 /// The service does not manage storage or automatically monitor display changes.
-/// Implementations using Win32 APIs throw <see cref="PlatformNotSupportedException"/>
+/// Implementations using Win32 APIs throw <see cref="System.PlatformNotSupportedException"/>
 /// on operating systems other than Windows.</summary>
 public interface IWindowPlacementService
 {
