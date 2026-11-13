@@ -7,7 +7,10 @@ namespace WindowPlacement.Sample.Wpf;
 public partial class MainWindow : Window
 {
     /// <summary>Creates the sample's main window and its controls.</summary>
-    public MainWindow() => InitializeComponent();
+    public MainWindow()
+    {
+        InitializeComponent();
+    }
 
     /// <summary>Opens the dialog and displays a status message when it closes.</summary>
     private void OpenDialog_Click(object sender, RoutedEventArgs e)

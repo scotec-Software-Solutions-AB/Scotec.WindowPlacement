@@ -9,7 +9,8 @@
 		<DefineConstants>$(DefineConstants);JETBRAINS_ANNOTATIONS</DefineConstants>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true' 
+	<PropertyGroup
+		Condition="'$(GITHUB_ACTIONS)' == 'true' 
                       Or '$(TF_BUILD)' == 'true' 
                       Or '$(CI)' == 'true'">
 		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
@@ -34,7 +35,7 @@
 		<RepositoryType>git</RepositoryType>
 		<SignAssembly>False</SignAssembly>
 	</PropertyGroup>
-	
+
 	<PropertyGroup>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<IsPackable>true</IsPackable>
@@ -42,11 +43,11 @@
 		<DebugSymbols>true</DebugSymbols>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 	</PropertyGroup>
-	
+
 	<ItemGroup>
-		<None Include="..\Logo.png" Pack="true" PackagePath=""/>
-		<None Include="README.md" Pack="true" PackagePath=""/>
-		<Content Include="..\..\license.txt" Link="license.txt" Pack="true" PackagePath="license.txt"/>
+		<None Include="..\Logo.png" Pack="true" PackagePath="" />
+		<None Include="README.md" Pack="true" PackagePath="" />
+		<Content Include="..\..\license.txt" Link="license.txt" Pack="true" PackagePath="license.txt" />
 	</ItemGroup>
 
 	<PropertyGroup>

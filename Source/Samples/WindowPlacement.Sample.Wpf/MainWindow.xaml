@@ -4,9 +4,10 @@
         Title="Window Placement Sample" Width="590" Height="300"
         WindowStartupLocation="CenterScreen">
     <StackPanel Margin="24">
-        <TextBlock Text="Framework-independent HWND window placement" FontSize="19" FontWeight="SemiBold" Margin="0,0,0,14"/>
+        <TextBlock Text="Framework-independent HWND window placement" FontSize="19" FontWeight="SemiBold"
+                   Margin="0,0,0,14" />
         <TextBlock TextWrapping="Wrap" Margin="0,0,0,18">Open the dialog, move it to a different monitor and resize it. Close and reopen it to restore its position. Try disconnecting a monitor or changing display scaling between runs.</TextBlock>
-        <Button Content="Open dialog" Width="140" Height="36" HorizontalAlignment="Left" Click="OpenDialog_Click"/>
-        <TextBlock x:Name="Status" TextWrapping="Wrap" Margin="0,18,0,0"/>
+        <Button Content="Open dialog" Width="140" Height="36" HorizontalAlignment="Left" Click="OpenDialog_Click" />
+        <TextBlock x:Name="Status" TextWrapping="Wrap" Margin="0,18,0,0" />
     </StackPanel>
 </Window>

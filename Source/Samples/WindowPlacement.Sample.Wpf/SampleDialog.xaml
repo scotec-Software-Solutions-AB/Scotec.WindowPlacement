@@ -5,11 +5,12 @@
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
     <DockPanel Margin="20">
         <Button Content="Close" DockPanel.Dock="Bottom" Width="100" Height="30"
-                HorizontalAlignment="Right" Margin="0,20,0,0" Click="Close_Click"/>
+                HorizontalAlignment="Right" Margin="0,20,0,0" Click="Close_Click" />
         <StackPanel>
-            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Move and resize this dialog"/>
+            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Move and resize this dialog" />
             <TextBlock Margin="0,14,0,0" TextWrapping="Wrap">Its position is captured from the HWND when closing. On the next opening, the saved monitor-relative DPI-independent position is resolved against the available monitors and applied using WPF window properties.</TextBlock>
-            <TextBlock Margin="0,18,0,0" Text="Close this dialog, then reopen it from the main window." TextWrapping="Wrap"/>
+            <TextBlock Margin="0,18,0,0" Text="Close this dialog, then reopen it from the main window."
+                       TextWrapping="Wrap" />
         </StackPanel>
     </DockPanel>
 </Window>

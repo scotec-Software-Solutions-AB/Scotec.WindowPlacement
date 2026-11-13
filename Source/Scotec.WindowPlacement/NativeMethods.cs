@@ -4,13 +4,12 @@ using System.Runtime.InteropServices;
 
 namespace Scotec.WindowPlacement;
 
-/// <summary>Win32 interoperability declarations used by the window placement implementation.
-/// RECT and WINDOWPLACEMENT are native structures; keep their layouts unchanged.</summary>
+/// <summary>
+///     Win32 interoperability declarations used by the window placement implementation.
+///     RECT and WINDOWPLACEMENT are native structures; keep their layouts unchanged.
+/// </summary>
 internal static class NativeMethods
 {
-    // Windows 10: negative pseudo-handles are documented DPI_AWARENESS_CONTEXT constants.
-    internal static readonly nint DpiAwarenessContextPerMonitorAwareV2 = new(-4);
-    internal static readonly nint DpiAwarenessContextPerMonitorAware = new(-3);
     internal const int GwlExStyle = -20;
     internal const long WsExToolWindow = 0x00000080L;
     internal const int GwlStyle = -16;
@@ -22,62 +21,21 @@ internal static class NativeMethods
     internal const int SwShowNormal = 1;
     internal const int SwShowMaximized = 3;
     internal const uint SwpNoZOrder = 0x0004;
+
     internal const uint SwpNoActivate = 0x0010;
 
-    /// <summary>Native pixel point used in Win32 rectangles and placement data.</summary>
-    [StructLayout(LayoutKind.Sequential)] internal struct Point { internal int X; internal int Y; }
+    // Windows 10: negative pseudo-handles are documented DPI_AWARENESS_CONTEXT constants.
+    internal static readonly nint DpiAwarenessContextPerMonitorAwareV2 = new(-4);
+    internal static readonly nint DpiAwarenessContextPerMonitorAware = new(-3);
 
-    /// <summary>Native rectangle containing left/top/right/bottom endpoints.</summary>
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct Rect
-    {
-        internal int Left, Top, Right, Bottom;
-        /// <summary>Converts a native rectangle into origin-and-size form.</summary>
-        internal readonly PlacementRect ToPlacementRect() => new(Left, Top, Right - Left, Bottom - Top);
-    }
-
-    /// <summary>Window placement structure returned by GetWindowPlacement.</summary>
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct WindowPlacementNative
-    {
-        internal uint Length, Flags, ShowCmd;
-        internal Point MinPosition, MaxPosition;
-        internal Rect NormalPosition;
-    }
-
-    /// <summary>Monitor metadata returned by GetMonitorInfo; string is fixed-width UTF-16.</summary>
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    internal struct MonitorInfoEx
-    {
-        internal uint Size;
-        internal Rect Monitor, Work;
-        internal uint Flags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-        internal string Device;
-    }
-
-    /// <summary>DISPLAY_DEVICEW used to obtain the GUID_DEVINTERFACE_MONITOR device-interface
-    /// path associated with a GDI display name. All string fields are fixed-size UTF-16 arrays.</summary>
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    internal struct DisplayDevice
-    {
-        internal uint Size;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] internal string DeviceName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] internal string DeviceString;
-        internal uint StateFlags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] internal string DeviceId;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] internal string DeviceKey;
-    }
-
-    /// <summary>Enumerates physical/virtual monitors attached to the specified GDI display device.
-    /// EDD_GET_DEVICE_INTERFACE_NAME requests the monitor interface path in DeviceId.
-    /// False is also the normal end-of-enumeration result; it is not automatically an error.</summary>
+    /// <summary>
+    ///     Enumerates physical/virtual monitors attached to the specified GDI display device.
+    ///     EDD_GET_DEVICE_INTERFACE_NAME requests the monitor interface path in DeviceId.
+    ///     False is also the normal end-of-enumeration result; it is not automatically an error.
+    /// </summary>
     [DllImport("user32.dll", EntryPoint = "EnumDisplayDevicesW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool EnumDisplayDevices(string device, uint index, ref DisplayDevice result, uint flags);
-
-    /// <summary>Callback used by EnumDisplayMonitors.</summary>
-    internal delegate bool MonitorEnumProc(nint hMonitor, nint hdcMonitor, nint rect, nint data);
 
     /// <summary>Enumerates the currently attached logical display monitors.</summary>
     [DllImport("user32.dll", SetLastError = true)]
@@ -97,8 +55,10 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     internal static extern nint GetThreadDpiAwarenessContext();
 
-    /// <summary>Temporarily changes the calling thread DPI-awareness context and returns the prior
-    /// context on success, or zero on failure. It does not change Revit's process DPI awareness.</summary>
+    /// <summary>
+    ///     Temporarily changes the calling thread DPI-awareness context and returns the prior
+    ///     context on success, or zero on failure. It does not change Revit's process DPI awareness.
+    /// </summary>
     [DllImport("user32.dll", SetLastError = true)]
     internal static extern nint SetThreadDpiAwarenessContext(nint dpiContext);
 
@@ -129,16 +89,24 @@ internal static class NativeMethods
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
     internal static extern int GetWindowLong32(nint hwnd, int index);
 
-    /// <summary>Gets window extended styles, including the tool-window flag used to interpret
-    /// WINDOWPLACEMENT normal position coordinates.</summary>
-    internal static long GetExtendedStyle(nint hwnd) => IntPtr.Size == 8
-        ? GetWindowLongPtr64(hwnd, GwlExStyle).ToInt64()
-        : GetWindowLong32(hwnd, GwlExStyle);
+    /// <summary>
+    ///     Gets window extended styles, including the tool-window flag used to interpret
+    ///     WINDOWPLACEMENT normal position coordinates.
+    /// </summary>
+    internal static long GetExtendedStyle(nint hwnd)
+    {
+        return IntPtr.Size == 8
+            ? GetWindowLongPtr64(hwnd, GwlExStyle).ToInt64()
+            : GetWindowLong32(hwnd, GwlExStyle);
+    }
 
     /// <summary>Resolves GetWindowLongPtr across process architectures.</summary>
-    internal static long GetStyle(nint hwnd) => IntPtr.Size == 8
-        ? GetWindowLongPtr64(hwnd, GwlStyle).ToInt64()
-        : GetWindowLong32(hwnd, GwlStyle);
+    internal static long GetStyle(nint hwnd)
+    {
+        return IntPtr.Size == 8
+            ? GetWindowLongPtr64(hwnd, GwlStyle).ToInt64()
+            : GetWindowLong32(hwnd, GwlStyle);
+    }
 
     /// <summary>Places a native HWND using the supplied native screen rectangle.</summary>
     [DllImport("user32.dll", SetLastError = true)]
@@ -160,5 +128,77 @@ internal static class NativeMethods
     internal static extern bool IsWindow(nint hwnd);
 
     /// <summary>Constructs an exception using the last Win32 error code.</summary>
-    internal static Win32Exception Error() => new(Marshal.GetLastWin32Error());
+    internal static Win32Exception Error()
+    {
+        return new Win32Exception(Marshal.GetLastWin32Error());
+    }
+
+    /// <summary>Native pixel point used in Win32 rectangles and placement data.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Point
+    {
+        internal int X;
+        internal int Y;
+    }
+
+    /// <summary>Native rectangle containing left/top/right/bottom endpoints.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Rect
+    {
+        internal int Left, Top, Right, Bottom;
+
+        /// <summary>Converts a native rectangle into origin-and-size form.</summary>
+        internal readonly PlacementRect ToPlacementRect()
+        {
+            return new PlacementRect(Left, Top, Right - Left, Bottom - Top);
+        }
+    }
+
+    /// <summary>Window placement structure returned by GetWindowPlacement.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct WindowPlacementNative
+    {
+        internal uint Length, Flags, ShowCmd;
+        internal Point MinPosition, MaxPosition;
+        internal Rect NormalPosition;
+    }
+
+    /// <summary>Monitor metadata returned by GetMonitorInfo; string is fixed-width UTF-16.</summary>
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    internal struct MonitorInfoEx
+    {
+        internal uint Size;
+        internal Rect Monitor, Work;
+        internal uint Flags;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        internal string Device;
+    }
+
+    /// <summary>
+    ///     DISPLAY_DEVICEW used to obtain the GUID_DEVINTERFACE_MONITOR device-interface
+    ///     path associated with a GDI display name. All string fields are fixed-size UTF-16 arrays.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    internal struct DisplayDevice
+    {
+        internal uint Size;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        internal string DeviceName;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        internal string DeviceString;
+
+        internal uint StateFlags;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        internal string DeviceId;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        internal string DeviceKey;
+    }
+
+    /// <summary>Callback used by EnumDisplayMonitors.</summary>
+    internal delegate bool MonitorEnumProc(nint hMonitor, nint hdcMonitor, nint rect, nint data);
 }

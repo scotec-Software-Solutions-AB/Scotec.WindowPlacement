@@ -71,15 +71,25 @@ internal static class Program
             Console.WriteLine("All placement resolver and DPI context checks passed.");
             return 0;
         }
-        catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex);
+            return 1;
+        }
     }
 
-    /// <summary>Checks that the native monitor provider changes DPI awareness only temporarily,
-    /// leaving the caller's thread context exactly as it was before the query. The test is
-    /// skipped on non-Windows hosts, where no user32 APIs are available.</summary>
+    /// <summary>
+    ///     Checks that the native monitor provider changes DPI awareness only temporarily,
+    ///     leaving the caller's thread context exactly as it was before the query. The test is
+    ///     skipped on non-Windows hosts, where no user32 APIs are available.
+    /// </summary>
     private static void VerifyThreadDpiContextRestored()
     {
-        if (!OperatingSystem.IsWindows()) return;
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         var original = GetThreadDpiAwarenessContext();
         var displays = new Win32MonitorProvider().GetMonitors();
         Assert(displays.Count != 0, "Windows monitor enumeration");
@@ -91,32 +101,43 @@ internal static class Program
     [DllImport("user32.dll")]
     private static extern nint GetThreadDpiAwarenessContext();
 
-    /// <summary>Compares two DPI-awareness contexts using Win32 semantic equality, which is safer
-    /// than comparing raw pseudo-handle values.</summary>
+    /// <summary>
+    ///     Compares two DPI-awareness contexts using Win32 semantic equality, which is safer
+    ///     than comparing raw pseudo-handle values.
+    /// </summary>
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool AreDpiAwarenessContextsEqual(nint left, nint right);
 
     /// <summary>Builds a synthetic monitor with a working area equal to its physical rectangle.</summary>
     private static MonitorSnapshot Monitor(string name, double x, double y, double w, double h,
-        uint dpi, bool primary = false) => new()
+                                           uint dpi, bool primary = false)
     {
-        DeviceName = name,
-        BoundsPixels = new PlacementRect(x, y, w, h),
-        WorkAreaPixels = new PlacementRect(x, y, w, h),
-        DpiX = dpi, DpiY = dpi, IsPrimary = primary
-    };
+        return new MonitorSnapshot
+        {
+            DeviceName = name,
+            BoundsPixels = new PlacementRect(x, y, w, h),
+            WorkAreaPixels = new PlacementRect(x, y, w, h),
+            DpiX = dpi, DpiY = dpi, IsPrimary = primary
+        };
+    }
 
     /// <summary>Builds a saved monitor-relative DIP placement for testing.</summary>
-    private static SavedWindowPlacement Saved(MonitorSnapshot monitor, PlacementRect rect) => new()
+    private static SavedWindowPlacement Saved(MonitorSnapshot monitor, PlacementRect rect)
     {
-        Monitor = monitor, BoundsDip = rect, IsResizable = true,
-        IsMaximized = false, WindowDpi = monitor.DpiX
-    };
+        return new SavedWindowPlacement
+        {
+            Monitor = monitor, BoundsDip = rect, IsResizable = true,
+            IsMaximized = false, WindowDpi = monitor.DpiX
+        };
+    }
 
     /// <summary>Raises a test failure when a condition is false.</summary>
     private static void Assert(bool condition, string message)
     {
-        if (!condition) throw new Exception($"FAILED: {message}");
+        if (!condition)
+        {
+            throw new Exception($"FAILED: {message}");
+        }
     }
 }
