@@ -4,7 +4,7 @@ using System.Windows;
 namespace WindowPlacement.Sample.Wpf;
 
 /// <summary>Demonstrates opening a modal WPF dialog repeatedly, with persisted position and size.</summary>
-public partial class MainWindow : Window
+public partial class MainWindow
 {
     /// <summary>Creates the sample's main window and its controls.</summary>
     public MainWindow()

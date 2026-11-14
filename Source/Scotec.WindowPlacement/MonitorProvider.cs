@@ -73,9 +73,7 @@ public sealed class Win32MonitorProvider : IMonitorProvider
 				throw NativeMethods.Error();
 			}
 
-			var dpiX = ReferenceDpi;
-			var dpiY = ReferenceDpi;
-			// MDT_EFFECTIVE_DPI (0) is meaningful because the thread is per-monitor DPI-aware.
+            // MDT_EFFECTIVE_DPI (0) is meaningful because the thread is per-monitor DPI-aware.
 			// A failure is explicit: silently assuming 96 DPI would corrupt saved placement.
 			var hr = NativeMethods.GetDpiForMonitor(monitor, EffectiveDpi, out var x, out var y);
 			if (hr < 0)
@@ -83,11 +81,11 @@ public sealed class Win32MonitorProvider : IMonitorProvider
 				Marshal.ThrowExceptionForHR(hr);
 			}
 
-			dpiX = x;
-			dpiY = y;
+			var dpiX = x;
+			var dpiY = y;
 			monitors.Add(new MonitorSnapshot
 			{
-				DeviceName = info.Device ?? string.Empty,
+				DeviceName = info.Device,
 				MonitorDevicePath = GetMonitorDevicePath(info.Device),
 				BoundsPixels = info.Monitor.ToPlacementRect(),
 				// The work area excludes taskbars and docked toolbars; it is the region used for clamping.

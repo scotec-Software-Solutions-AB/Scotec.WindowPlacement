@@ -14,7 +14,7 @@ namespace WindowPlacement.Sample.Wpf;
 ///     Modal WPF dialog that restores its saved placement after its HWND is created, and
 ///     captures native placement during Closing. Persistent data is written beneath LocalAppData.
 /// </summary>
-public partial class SampleDialog : Window
+public partial class SampleDialog
 {
     private static readonly IWindowPlacementService PlacementService = new Win32WindowPlacementService();
 

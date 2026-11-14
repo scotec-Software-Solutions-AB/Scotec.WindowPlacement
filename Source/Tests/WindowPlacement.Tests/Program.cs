@@ -1,8 +1,12 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Scotec.WindowPlacement;
 
+namespace WindowPlacement.Tests;
+
 /// <summary>Dependency-free geometry regression tests. Run with dotnet run --project tests/WindowPlacement.Tests.</summary>
+[SuppressMessage("ReSharper", "CompareOfFloatsByEqualityOperator")]
 internal static class Program
 {
     /// <summary>Executes placement recovery tests and returns nonzero on failure.</summary>
