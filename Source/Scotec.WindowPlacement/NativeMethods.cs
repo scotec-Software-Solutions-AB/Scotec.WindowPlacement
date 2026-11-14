@@ -58,6 +58,12 @@ internal static class NativeMethods
 	/// <summary>SW_SHOWMAXIMIZED (3): <c>WINDOWPLACEMENT.showCmd</c> / <c>ShowWindow</c> value for a maximized window.</summary>
 	internal const int SwShowMaximized = 3;
 
+	/// <summary>
+	///     WPF_RESTORETOMAXIMIZED (0x0002): <c>WINDOWPLACEMENT.flags</c> bit set when a minimized window will be
+	///     restored to the maximized state instead of the normal state.
+	/// </summary>
+	internal const uint WpfRestoreToMaximized = 0x0002;
+
 	/// <summary>SWP_NOZORDER: <c>SetWindowPos</c> keeps the current Z order and ignores the insert-after handle.</summary>
 	internal const uint SwpNoZOrder = 0x0004;
 

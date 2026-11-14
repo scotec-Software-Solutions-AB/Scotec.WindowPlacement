@@ -69,7 +69,7 @@ public sealed record SavedWindowPlacement
     /// <summary>Whether the source window had a native sizing frame when captured.</summary>
     public required bool IsResizable { get; init; }
 
-    /// <summary>Whether the window was maximized when captured. Minimized windows are saved as normal.</summary>
+    /// <summary>Whether the window was maximized when captured, including a window that was maximized and then minimized (WPF_RESTORETOMAXIMIZED). A minimized window is otherwise saved as normal; the minimized state itself is never saved.</summary>
     public required bool IsMaximized { get; init; }
 
     /// <summary>

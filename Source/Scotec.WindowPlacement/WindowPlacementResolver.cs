@@ -61,7 +61,7 @@ public static class WindowPlacementResolver
 	/// <exception cref="ArgumentNullException"><paramref name="saved" /> or <paramref name="available" /> is null.</exception>
 	/// <exception cref="ArgumentException">
 	///     <paramref name="available" /> is empty, the saved bounds or saved work area are invalid, or
-	///     the selected monitor has an invalid work area.
+	///     the selected monitor has an invalid work area or a zero DPI.
 	/// </exception>
 	public static ResolvedWindowPlacement Resolve(SavedWindowPlacement saved,
 												  IReadOnlyList<MonitorSnapshot> available, bool isResizable, WindowSizeConstraints? constraints = null)
@@ -93,6 +93,11 @@ public static class WindowPlacementResolver
 		// Step 2: DIPs -> physical pixels using the target monitor's DPI (per axis). The saved
 		// offset is relative to the work-area origin, so adding the target work-area origin keeps
 		// the logical position even when the monitor has changed.
+		if (target.DpiX == 0 || target.DpiY == 0)
+		{
+			throw new ArgumentException("A monitor reports an invalid (zero) DPI.", nameof(available));
+		}
+
 		var factorX = target.DpiX / ReferenceDpi;
 		var factorY = target.DpiY / ReferenceDpi;
 		var x = work.X + saved.BoundsDip.X * factorX;

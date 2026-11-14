@@ -54,11 +54,13 @@ public sealed class Win32WindowPlacementService : IWindowPlacementService
 	///     coordinates); for a maximized or minimized window the restored rectangle from
 	///     <c>GetWindowPlacement</c> is used and translated from workspace to screen coordinates. The
 	///     rectangle is the outer window rectangle and can include invisible resize borders on
-	///     DWM-composed windows.
+	///     DWM-composed windows. A window that was maximized and then minimized (the native
+	///     <c>WPF_RESTORETOMAXIMIZED</c> flag) is saved with <c>IsMaximized</c> set, because that is the state it
+	///     returns to; the minimized state itself is not saved.
 	/// </remarks>
 	/// <exception cref="PlatformNotSupportedException">The operating system is not Windows.</exception>
 	/// <exception cref="ArgumentException"><paramref name="hwnd" /> is zero or not an existing window.</exception>
-	/// <exception cref="InvalidOperationException">No monitors are available.</exception>
+	/// <exception cref="InvalidOperationException">No monitors are available, or the monitor chosen for the window reports a zero DPI (possible with a custom monitor provider).</exception>
 	/// <exception cref="System.ComponentModel.Win32Exception">A native query failed.</exception>
 	public SavedWindowPlacement GetCurrentPlacement(nint hwnd)
 	{
@@ -107,7 +109,10 @@ public sealed class Win32WindowPlacementService : IWindowPlacementService
 				normal.Y + ownerMonitor.WorkAreaPixels.Y - ownerMonitor.BoundsPixels.Y,
 				normal.Width, normal.Height);
 		// For non-maximized windows, GetWindowRect is the more direct current physical rectangle.
-		var isMaximized = native.ShowCmd == NativeMethods.SwShowMaximized;
+		// A window that was maximized and then minimized reports SW_SHOWMINIMIZED with the
+		// WPF_RESTORETOMAXIMIZED flag; its restored state is maximized, so it is saved as maximized.
+		var isMaximized = native.ShowCmd == NativeMethods.SwShowMaximized
+						  || (native.Flags & NativeMethods.WpfRestoreToMaximized) != 0;
 		if (native.ShowCmd == NativeMethods.SwShowNormal && currentRect.ToPlacementRect().IsValid)
 		{
 			adjusted = currentRect.ToPlacementRect();
@@ -122,6 +127,13 @@ public sealed class Win32WindowPlacementService : IWindowPlacementService
 				normal.X + monitor.WorkAreaPixels.X - monitor.BoundsPixels.X,
 				normal.Y + monitor.WorkAreaPixels.Y - monitor.BoundsPixels.Y,
 				normal.Width, normal.Height);
+		}
+
+		// A custom IMonitorProvider may report zero DPI, which would divide by zero below.
+		if (monitor.DpiX == 0 || monitor.DpiY == 0)
+		{
+			throw new InvalidOperationException(
+				$"Monitor '{monitor.DeviceName}' reported an invalid DPI ({monitor.DpiX}x{monitor.DpiY}).");
 		}
 
 		// Physical pixels -> DIPs relative to the monitor's work-area origin, using the monitor's own

@@ -37,7 +37,7 @@ For WPF or Avalonia windows, use the adapter packages `Scotec.WindowPlacement.Wp
 
 - **Saved** (`SavedWindowPlacement.BoundsDip`): DIPs (96 per inch), relative to the saved monitor's work-area origin. The monitor snapshot itself (`BoundsPixels`, `WorkAreaPixels`) is in physical virtual-screen pixels.
 - **Resolved** (`ResolvedWindowPlacement.BoundsPixels`): absolute physical virtual-desktop pixels. Origins can be negative for monitors left of or above the primary monitor.
-- The normal (restored) rectangle is saved even if the window is maximized. `IsMaximized` is stored separately. Minimized windows are saved as normal. For a maximized or minimized window the owning monitor is queried with `MonitorFromWindow`, because a minimized window's rectangle is off-screen.
+- The normal (restored) rectangle is saved even if the window is maximized. `IsMaximized` is stored separately. A window that was maximized and then minimized (`WPF_RESTORETOMAXIMIZED`) is saved as maximized; other minimized windows are saved as normal, and the minimized state itself is never saved. A monitor with a zero DPI (custom `IMonitorProvider`) is rejected: `GetCurrentPlacement` throws `InvalidOperationException` and the resolver throws `ArgumentException`. For a maximized or minimized window the owning monitor is queried with `MonitorFromWindow`, because a minimized window's rectangle is off-screen.
 
 ## Monitor matching
 
