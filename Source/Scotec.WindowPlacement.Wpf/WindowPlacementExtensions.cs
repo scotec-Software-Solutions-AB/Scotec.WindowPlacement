@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
@@ -78,53 +78,53 @@ public static class WindowPlacementExtensions
         // WPF then handles the resulting WM_DPICHANGED itself and keeps the pixel size.
         window.WindowStartupLocation = WindowStartupLocation.Manual;
         window.SizeToContent = SizeToContent.Manual;
-		new Win32WindowPlacementService().ApplyPlacement(handle, placement);
+        new Win32WindowPlacementService().ApplyPlacement(handle, placement);
 
-		// A hidden window is not shown or maximized natively (that would show it before WPF has rendered
-		// its content), so the maximized state is requested through WPF; it takes effect when shown.
-		if (placement.IsMaximized)
-		{
-			window.WindowState = WindowState.Maximized;
-			return;
-		}
+        // A hidden window is not shown or maximized natively (that would show it before WPF has rendered
+        // its content), so the maximized state is requested through WPF; it takes effect when shown.
+        if (placement.IsMaximized)
+        {
+            window.WindowState = WindowState.Maximized;
+            return;
+        }
 
-		// While hidden, Windows does not deliver the target monitor's DPI change, so WPF lays the window
-		// out with the DPI of the monitor it was created on. After Loaded and after each DpiChanged until
-		// the first render the bounds are applied again, posted to the dispatcher so it never runs inside
-		// WPF's own DPI handling. The window DPI is stable once it is on the target monitor.
-		void Reapply()
-		{
-			if (PresentationSource.FromVisual(window) is not null)
-			{
-				new Win32WindowPlacementService().ApplyPlacement(handle, placement);
-			}
-		}
+        // While hidden, Windows does not deliver the target monitor's DPI change, so WPF lays the window
+        // out with the DPI of the monitor it was created on. After Loaded and after each DpiChanged until
+        // the first render the bounds are applied again, posted to the dispatcher so it never runs inside
+        // WPF's own DPI handling. The window DPI is stable once it is on the target monitor.
+        void Reapply()
+        {
+            if (window.IsLoaded && PresentationSource.FromVisual(window) is not null)
+            {
+                new Win32WindowPlacementService().ApplyPlacement(handle, placement);
+            }
+        }
 
-		void Post()
-		{
-			window.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, Reapply);
-		}
+        void Post()
+        {
+            window.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, Reapply);
+        }
 
-		void OnLoaded(object sender, RoutedEventArgs e)
-		{
-			window.Loaded -= OnLoaded;
-			Post();
-		}
+        void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            window.Loaded -= OnLoaded;
+            Post();
+        }
 
-		void OnDpiChanged(object sender, DpiChangedEventArgs e)
-		{
-			Post();
-		}
+        void OnDpiChanged(object sender, DpiChangedEventArgs e)
+        {
+            Post();
+        }
 
-		void OnContentRendered(object? sender, EventArgs e)
-		{
-			window.ContentRendered -= OnContentRendered;
-			window.DpiChanged -= OnDpiChanged;
-			Post();
-		}
+        void OnContentRendered(object? sender, EventArgs e)
+        {
+            window.ContentRendered -= OnContentRendered;
+            window.DpiChanged -= OnDpiChanged;
+            Post();
+        }
 
-		window.Loaded += OnLoaded;
-		window.DpiChanged += OnDpiChanged;
-		window.ContentRendered += OnContentRendered;
-	}
+        window.Loaded += OnLoaded;
+        window.DpiChanged += OnDpiChanged;
+        window.ContentRendered += OnContentRendered;
+    }
 }

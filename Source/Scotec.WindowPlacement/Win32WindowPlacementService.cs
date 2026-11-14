@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -174,6 +174,8 @@ public sealed class Win32WindowPlacementService : IWindowPlacementService
 	///     before the framework has rendered its content. Only <c>SetWindowPos</c> with SWP_NOACTIVATE moves it,
 	///     and a maximized placement is not applied natively, so the caller must maximize it. A hidden window
 	///     receives no DPI change for the target monitor; apply the placement again once the window is visible.
+	///     A visible window that is already in the normal state is not passed to <c>ShowWindow</c> either, so
+	///     applying the placement again does not activate it; only a maximized or minimized window is restored.
 	/// </remarks>
 	/// <exception cref="PlatformNotSupportedException">The operating system is not Windows.</exception>
 	/// <exception cref="ArgumentException">
@@ -203,7 +205,22 @@ public sealed class Win32WindowPlacementService : IWindowPlacementService
 		var wasVisible = NativeMethods.IsWindowVisible(hwnd);
 		if (wasVisible)
 		{
-			NativeMethods.ShowWindow(hwnd, NativeMethods.SwShowNormal);
+			// Restore only a maximized or minimized window. SW_SHOWNORMAL also activates the window, so using it
+			// on an already normal window (for example when the placement is applied again after the window
+			// was shown) would steal focus and ignore a non-activating window.
+			var current = new NativeMethods.WindowPlacementNative
+			{
+				Length = (uint)Marshal.SizeOf<NativeMethods.WindowPlacementNative>()
+			};
+			if (!NativeMethods.GetWindowPlacement(hwnd, ref current))
+			{
+				throw NativeMethods.Error();
+			}
+
+			if (current.ShowCmd != NativeMethods.SwShowNormal)
+			{
+				NativeMethods.ShowWindow(hwnd, NativeMethods.SwShowNormal);
+			}
 		}
 		// Moving a window to a monitor with a different DPI makes Windows send WM_DPICHANGED during
 		// SetWindowPos; per-monitor-aware frameworks then rescale the window from its old DPI, which

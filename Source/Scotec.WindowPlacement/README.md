@@ -1,4 +1,4 @@
-﻿# Scotec.WindowPlacement
+# Scotec.WindowPlacement
 
 Framework-independent, Windows-only core library. It captures the normal placement of a native top-level window (HWND), resolves a saved placement against the currently attached monitors, and can apply the result to an HWND. It has no WPF or Avalonia dependency.
 

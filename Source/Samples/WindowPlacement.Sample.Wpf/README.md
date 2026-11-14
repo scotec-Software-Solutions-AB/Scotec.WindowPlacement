@@ -1,4 +1,4 @@
-﻿# WindowPlacement.Sample.Wpf
+# WindowPlacement.Sample.Wpf
 
 WPF demo application (`net8.0-windows`, `WinExe`) for `Scotec.WindowPlacement` and `Scotec.WindowPlacement.Wpf`. It is a demonstration, not a library.
 

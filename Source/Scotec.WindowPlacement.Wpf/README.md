@@ -1,4 +1,4 @@
-﻿# Scotec.WindowPlacement.Wpf
+# Scotec.WindowPlacement.Wpf
 
 which applies a resolved placement to a WPF window by setting its exact physical outer bounds natively.
 
