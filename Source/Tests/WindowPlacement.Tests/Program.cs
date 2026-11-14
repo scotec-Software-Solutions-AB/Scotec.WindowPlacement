@@ -22,19 +22,19 @@ internal static class Program
             Assert(full.Monitor.DeviceName == "DISPLAY3" && full.BoundsPixels.X == 3940, "Same monitor restore");
             var fallback = WindowPlacementResolver.Resolve(saved, [first, second], true);
             Assert(fallback.Monitor.DeviceName == "DISPLAY2", "Nearest available monitor");
-            Assert(fallback.BoundsPixels.X == 2020 && fallback.BoundsPixels.Y == 100, "Preserves monitor-relative position");
+            Assert(fallback.BoundsPixels is { X: 2020, Y: 100 }, "Preserves monitor-relative position");
             var scaled = Monitor("DISPLAY3", 3840, 0, 1920, 1080, 144);
             var dpi = WindowPlacementResolver.Resolve(saved, [first, second, scaled], true);
-            Assert(dpi.BoundsPixels.X == 3990 && dpi.BoundsPixels.Y == 150, "DPI-relative position");
+            Assert(dpi.BoundsPixels is { X: 3990, Y: 150 }, "DPI-relative position");
             Assert(dpi.BoundsPixels.Width == 1200, "DPI-relative dimensions");
             var small = Monitor("DISPLAY3", 3840, 0, 640, 480, 96);
             var fit = WindowPlacementResolver.Resolve(saved, [small], true);
-            Assert(fit.BoundsPixels.Width == 640 && fit.BoundsPixels.Height == 480, "Resizable fit");
-            Assert(fit.BoundsPixels.X == 3840 && fit.BoundsPixels.Y == 0, "Fully visible after fit");
+            Assert(fit.BoundsPixels is { Width: 640, Height: 480 }, "Resizable fit");
+            Assert(fit.BoundsPixels is { X: 3840, Y: 0 }, "Fully visible after fit");
             var fixedResult = WindowPlacementResolver.Resolve(saved with { IsResizable = false }, [small], false);
-            Assert(fixedResult.BoundsPixels.Width == 800 && fixedResult.BoundsPixels.Height == 600,
+            Assert(fixedResult.BoundsPixels is { Width: 800, Height: 600 },
                 "Fixed window retains size");
-            Assert(fixedResult.BoundsPixels.X == 3760 && fixedResult.BoundsPixels.Y == -60,
+            Assert(fixedResult.BoundsPixels is { X: 3760, Y: -60 },
                 "Oversized fixed window centered");
             var taskbar = small with { WorkAreaPixels = new PlacementRect(3840, 40, 640, 440) };
             var shifted = WindowPlacementResolver.Resolve(saved, [taskbar], true);
@@ -56,7 +56,7 @@ internal static class Program
             // The old GDI name now belongs to a different physical monitor.
             // No matching interface path is present, so choose nearest geometry.
             var conflict = WindowPlacementResolver.Resolve(identitySaved, [first, stolenName], true);
-            Assert(conflict.UsedFallbackMonitor && conflict.Monitor.MonitorDevicePath == "MONITOR#B",
+            Assert(conflict is { UsedFallbackMonitor: true, Monitor.MonitorDevicePath: "MONITOR#B" },
                 "Conflicting interface path rejects false GDI name match");
 
             // Old JSON has no MonitorDevicePath. It still uses the GDI name.
