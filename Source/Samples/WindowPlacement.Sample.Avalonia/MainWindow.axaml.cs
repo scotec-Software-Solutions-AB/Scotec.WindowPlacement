@@ -4,7 +4,7 @@ using Avalonia.Interactivity;
 
 namespace WindowPlacement.Sample.Avalonia;
 
-/// <summary>Main window that repeatedly opens the placement-aware modal dialog.</summary>
+/// <summary>Main window that repeatedly opens the placement-aware non-modal dialog.</summary>
 public partial class MainWindow : Window
 {
     /// <summary>Creates the window and its controls.</summary>
@@ -13,14 +13,13 @@ public partial class MainWindow : Window
         InitializeComponent();
     }
 
-    /// <summary>Shows the dialog modally and reports where the placement was stored.</summary>
+    /// <summary>Shows the dialog non-modally and reports where its placement will be stored.</summary>
     private void OpenDialog_Click(object? sender, RoutedEventArgs e)
     {
         try
         {
-            //await new SampleDialog().ShowDialog(this);
             new SampleDialog().Show(this);
-            Status.Text = $"Saved placement: {SampleDialog.StoragePath}";
+            Status.Text = $"Placement is saved to: {SampleDialog.StoragePath}";
         }
         catch (Exception ex)
         {
