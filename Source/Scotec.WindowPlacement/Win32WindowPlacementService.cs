@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -93,7 +93,11 @@ public sealed class Win32WindowPlacementService : IWindowPlacementService
 		// The monitor that currently hosts the window. For a maximized or minimized window the
 		// current rectangle lies on the monitor where it was maximized or minimized, which is also the
 		// monitor to which the workspace-relative normal rectangle belongs.
-		var ownerMonitor = FindNearest(monitors, currentRect.ToPlacementRect());
+		// A minimized window reports a rectangle near (-32000, -32000), so for any non-normal show state the
+		// monitor is asked from Windows instead of being derived from that rectangle.
+		var ownerMonitor = native.ShowCmd == NativeMethods.SwShowNormal
+			? FindNearest(monitors, currentRect.ToPlacementRect())
+			: FindWindowMonitor(monitors, hwnd, currentRect.ToPlacementRect());
 		// WS_EX_TOOLWINDOW windows report the normal rectangle in screen coordinates already.
 		var isToolWindow = (NativeMethods.GetExtendedStyle(hwnd) & NativeMethods.WsExToolWindow) != 0;
 		var adjusted = isToolWindow
@@ -165,6 +169,11 @@ public sealed class Win32WindowPlacementService : IWindowPlacementService
 	///     what gets moved; the normal bounds are then applied, and the window is maximized again if
 	///     <see cref="ResolvedWindowPlacement.IsMaximized" /> is set. The bounds are rounded to whole
 	///     pixels. Windows can adjust the final size (minimum or maximum tracking size, WM_GETMINMAXINFO).
+	///     A window that is not visible (<c>IsWindowVisible</c> is false, for example a WPF window during
+	///     SourceInitialized) stays hidden: <c>ShowWindow</c> is not called because it would show the window
+	///     before the framework has rendered its content. Only <c>SetWindowPos</c> with SWP_NOACTIVATE moves it,
+	///     and a maximized placement is not applied natively, so the caller must maximize it. A hidden window
+	///     receives no DPI change for the target monitor; apply the placement again once the window is visible.
 	/// </remarks>
 	/// <exception cref="PlatformNotSupportedException">The operating system is not Windows.</exception>
 	/// <exception cref="ArgumentException">
@@ -267,6 +276,33 @@ public sealed class Win32WindowPlacementService : IWindowPlacementService
 		return (NativeMethods.GetStyle(hwnd) & NativeMethods.WsThickFrame) != 0;
 	}
 
+	/// <summary>
+	///     Finds the snapshot of the monitor that Windows associates with a window (largest overlap, otherwise
+	///     nearest). This stays valid for minimized windows whose rectangle is off-screen.
+	/// </summary>
+	/// <param name="monitors">Non-empty list of current monitors in physical pixels.</param>
+	/// <param name="hwnd">Existing window handle.</param>
+	/// <param name="fallbackRect">Rectangle used with <see cref="FindNearest" /> if the native query fails or matches no snapshot.</param>
+	/// <returns>The matching monitor snapshot.</returns>
+	private static MonitorSnapshot FindWindowMonitor(IReadOnlyList<MonitorSnapshot> monitors, nint hwnd, PlacementRect fallbackRect)
+	{
+		var handle = NativeMethods.MonitorFromWindow(hwnd, NativeMethods.MonitorDefaultToNearest);
+		if (handle != 0)
+		{
+			var info = new NativeMethods.MonitorInfoEx { Size = (uint)Marshal.SizeOf<NativeMethods.MonitorInfoEx>() };
+			if (NativeMethods.GetMonitorInfo(handle, ref info))
+			{
+				var bounds = info.Monitor.ToPlacementRect();
+				var match = monitors.FirstOrDefault(m => m.BoundsPixels == bounds);
+				if (match is not null)
+				{
+					return match;
+				}
+			}
+		}
+
+		return FindNearest(monitors, fallbackRect);
+	}
 	/// <summary>
 	///     Finds the monitor whose rectangle has the smallest distance to the center of a window
 	///     rectangle. A monitor that contains the center has distance zero, so it wins; if the

@@ -14,11 +14,12 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Shows the dialog modally and reports where the placement was stored.</summary>
-    private async void OpenDialog_Click(object? sender, RoutedEventArgs e)
+    private void OpenDialog_Click(object? sender, RoutedEventArgs e)
     {
         try
         {
-            await new SampleDialog().ShowDialog(this);
+            //await new SampleDialog().ShowDialog(this);
+            new SampleDialog().Show(this);
             Status.Text = $"Saved placement: {SampleDialog.StoragePath}";
         }
         catch (Exception ex)

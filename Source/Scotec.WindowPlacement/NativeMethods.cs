@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 
@@ -112,6 +112,12 @@ internal static class NativeMethods
 	[return: MarshalAs(UnmanagedType.Bool)]
 	internal static extern bool GetMonitorInfo(nint monitor, ref MonitorInfoEx info);
 
+	/// <summary>Finds the monitor that contains the largest part of a window, or the nearest one.</summary>
+	/// <param name="hwnd">Window handle.</param>
+	/// <param name="flags">One of the MONITOR_DEFAULTTO* constants, for example <see cref="MonitorDefaultToNearest" />.</param>
+	/// <returns>An HMONITOR, or zero if none matches and no default flag applies.</returns>
+	[DllImport("user32.dll")]
+	internal static extern nint MonitorFromWindow(nint hwnd, uint flags);
 	/// <summary>Finds the monitor nearest the supplied rectangle. Currently not used by the library.</summary>
 	/// <param name="rect">Rectangle in virtual-desktop screen coordinates.</param>
 	/// <param name="flags">One of the MONITOR_DEFAULTTO* constants, for example <see cref="MonitorDefaultToNearest" />.</param>

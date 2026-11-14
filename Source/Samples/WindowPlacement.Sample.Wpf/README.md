@@ -1,10 +1,10 @@
-# WindowPlacement.Sample.Wpf
+﻿# WindowPlacement.Sample.Wpf
 
 WPF demo application (`net8.0-windows`, `WinExe`) for `Scotec.WindowPlacement` and `Scotec.WindowPlacement.Wpf`. It is a demonstration, not a library.
 
 ## What it shows
 
-`MainWindow` opens a modal, resizable `SampleDialog`. The dialog:
+`MainWindow` opens a non-modal, resizable `SampleDialog` with `Show`. The dialog is owned by the main window. Closing the owner destroys an owned (for example minimized) dialog without raising its `Closing` event, so the dialog also saves its placement from the owner's `Closing` event. The dialog:
 
 1. **Restores** in `SourceInitialized`: reads the saved JSON, calls `IWindowPlacementService.GetPlacement` (with the dialog's `MinWidth` and `MinHeight` as `WindowSizeConstraints`) and applies the result with the WPF `ApplyTo` extension. If the restore fails, the dialog is centered on its owner instead.
 2. **Captures** in `Closing`: calls `GetCurrentPlacement` on the dialog's HWND and writes the JSON through a `.tmp` file followed by an overwriting move.

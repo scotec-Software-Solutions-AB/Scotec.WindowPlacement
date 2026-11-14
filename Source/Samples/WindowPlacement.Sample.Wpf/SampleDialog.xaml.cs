@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -11,8 +11,8 @@ using Scotec.WindowPlacement.Wpf;
 namespace WindowPlacement.Sample.Wpf;
 
 /// <summary>
-///     Modal WPF dialog that restores its saved placement after its HWND is created, and
-///     captures native placement during Closing. Persistent data is written beneath LocalAppData.
+///     Non-modal WPF dialog that restores its saved placement after its HWND is created, and
+///     captures native placement during Closing or when its owner closes. Persistent data is written beneath LocalAppData.
 /// </summary>
 public partial class SampleDialog
 {
@@ -32,10 +32,17 @@ public partial class SampleDialog
 
     /// <summary>
     ///     Resolves persisted placement when the HWND has been created but before the dialog
-    ///     becomes visible. Invokes the WPF extension for physical-to-WPF coordinate conversion.
+    ///     becomes visible. Invokes the WPF extension, which applies the exact physical bounds natively.
     /// </summary>
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
+        // Closing an owner destroys its owned windows natively (no WM_CLOSE), so Closing is not raised on
+        // the dialog (for example while minimized). The owner's Closing still runs while the HWND exists.
+        if (Owner is { } owner)
+        {
+            owner.Closing += OnOwnerClosing;
+        }
+
         if (!File.Exists(StoragePath))
         {
             return;
@@ -56,7 +63,7 @@ public partial class SampleDialog
         }
         catch (Exception ex)
         {
-            // Corrupt/stale placement must never prevent a modal dialog from becoming visible.
+            // Corrupt/stale placement must never prevent the dialog from becoming visible.
             Debug.WriteLine($"Placement restore failed: {ex}");
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
         }
@@ -69,9 +76,39 @@ public partial class SampleDialog
     /// </summary>
     private void OnClosing(object? sender, CancelEventArgs e)
     {
+        if (Owner is { } owner)
+        {
+            owner.Closing -= OnOwnerClosing;
+        }
+
+        SavePlacement();
+    }
+
+    /// <summary>Saves the placement when the owner starts closing; the dialog may never get Closing.</summary>
+    /// <param name="sender">The owner window.</param>
+    /// <param name="e">Closing event data; nothing is saved if the close was cancelled.</param>
+    private void OnOwnerClosing(object? sender, CancelEventArgs e)
+    {
+        if (!e.Cancel)
+        {
+            SavePlacement();
+        }
+    }
+
+    /// <summary>
+    ///     Captures the native placement of the existing HWND and atomically writes it as JSON. Sample-level
+    ///     best-effort persistence: IO and native failures are logged and never block closing.
+    /// </summary>
+    private void SavePlacement()
+    {
         try
         {
             var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd == 0)
+            {
+                return;
+            }
+
             var placement = PlacementService.GetCurrentPlacement(hwnd);
             var folder = Path.GetDirectoryName(StoragePath)!;
             Directory.CreateDirectory(folder);

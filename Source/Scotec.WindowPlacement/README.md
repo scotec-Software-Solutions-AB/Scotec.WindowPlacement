@@ -1,4 +1,4 @@
-# Scotec.WindowPlacement
+﻿# Scotec.WindowPlacement
 
 Framework-independent, Windows-only core library. It captures the normal placement of a native top-level window (HWND), resolves a saved placement against the currently attached monitors, and can apply the result to an HWND. It has no WPF or Avalonia dependency.
 
@@ -37,7 +37,7 @@ For WPF or Avalonia windows, use the adapter packages `Scotec.WindowPlacement.Wp
 
 - **Saved** (`SavedWindowPlacement.BoundsDip`): DIPs (96 per inch), relative to the saved monitor's work-area origin. The monitor snapshot itself (`BoundsPixels`, `WorkAreaPixels`) is in physical virtual-screen pixels.
 - **Resolved** (`ResolvedWindowPlacement.BoundsPixels`): absolute physical virtual-desktop pixels. Origins can be negative for monitors left of or above the primary monitor.
-- The normal (restored) rectangle is saved even if the window is maximized. `IsMaximized` is stored separately. Minimized windows are saved as normal.
+- The normal (restored) rectangle is saved even if the window is maximized. `IsMaximized` is stored separately. Minimized windows are saved as normal. For a maximized or minimized window the owning monitor is queried with `MonitorFromWindow`, because a minimized window's rectangle is off-screen.
 
 ## Monitor matching
 
@@ -59,7 +59,7 @@ Names and interface paths can change with RDP, virtual machines, docking, driver
 ## DPI awareness and threading
 
 - `GetMonitors`, `GetCurrentPlacement` and `ApplyPlacement` temporarily switch the calling thread to a per-monitor-aware DPI context and restore the previous context in `finally`. A failed switch throws. Process DPI awareness is never changed, and no framework UI code is called inside the scope.
-- `ApplyPlacement` uses `ShowWindow` and `SetWindowPos`, which may dispatch window messages synchronously while the temporary context is active. Verify this in your host application.
+- `ApplyPlacement` uses `SetWindowPos`, and `ShowWindow` only for a window that is already visible; both may dispatch window messages synchronously while the temporary context is active. A hidden window stays hidden and is not maximized natively, so the caller must maximize it and should apply the placement again once the window is visible (a hidden window gets no DPI change for the target monitor). Verify this in your host application.
 - Call HWND operations on the window-owning UI thread.
 - Windows-specific entry points throw `PlatformNotSupportedException` on other operating systems.
 

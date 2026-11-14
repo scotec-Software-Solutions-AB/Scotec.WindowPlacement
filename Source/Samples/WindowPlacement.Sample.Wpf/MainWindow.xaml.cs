@@ -1,9 +1,9 @@
-using System;
+﻿using System;
 using System.Windows;
 
 namespace WindowPlacement.Sample.Wpf;
 
-/// <summary>Demonstrates opening a modal WPF dialog repeatedly, with persisted position and size.</summary>
+/// <summary>Demonstrates opening a non-modal WPF dialog repeatedly, with persisted position and size.</summary>
 public partial class MainWindow
 {
     /// <summary>Creates the sample's main window and its controls.</summary>
@@ -18,7 +18,8 @@ public partial class MainWindow
         try
         {
             var dialog = new SampleDialog { Owner = this };
-            dialog.ShowDialog();
+            //dialog.ShowDialog();
+            dialog.Show();
             Status.Text = $"Saved placement: {SampleDialog.StoragePath}";
         }
         catch (Exception ex)

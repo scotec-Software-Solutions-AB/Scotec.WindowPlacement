@@ -10,7 +10,7 @@ using Scotec.WindowPlacement.Avalonia;
 namespace WindowPlacement.Sample.Avalonia;
 
 /// <summary>
-///     Modal Avalonia dialog that restores its saved placement before it is shown and captures the
+///     Non-modal Avalonia dialog that restores its saved placement before it is shown and captures the
 ///     native placement when it closes. Persistent data is written beneath LocalAppData.
 /// </summary>
 public partial class SampleDialog : Window
