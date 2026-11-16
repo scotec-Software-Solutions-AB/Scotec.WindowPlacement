@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+	<OutputType>WinExe</OutputType>
+	<EnableWindowsTargeting>true</EnableWindowsTargeting>
+	<IsPackable>false</IsPackable>
+	<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+  <ItemGroup>
+	<PackageReference Include="Avalonia" />
+	<PackageReference Include="Avalonia.Desktop" />
+	<PackageReference Include="Avalonia.Themes.Fluent" />
+	<ProjectReference Include="../../Scotec.WindowPlacement.Avalonia/Scotec.WindowPlacement.Avalonia.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,417 @@
+name: Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # Prerelease
+  #
+  # Manual build from develop.
+  #
+  # Azure federated credential:
+  #   Entity type: Branch
+  #   Branch: develop
+  #
+  # Do NOT specify a GitHub environment here.
+  # ---------------------------------------------------------------------------
+
+  prerelease:
+    name: Prerelease
+
+    if: github.ref == 'refs/heads/develop'
+
+    runs-on: windows-2025
+
+    steps: &build_steps
+
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    # Keep GitVersion 5 because this repository currently uses
+    # GitVersion 5-style configuration.
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v0.10.2
+      with:
+        versionSpec: '5.12.x'
+
+    - name: Determine Version
+      uses: gittools/actions/gitversion/execute@v0.10.2
+      with:
+        useConfigFile: true
+        configFilePath: GitVersion.yml
+
+    - name: Set package version
+      shell: pwsh
+      run: |
+        $packageVersion = $env:GITVERSION_SEMVER
+
+        if ([string]::IsNullOrWhiteSpace($packageVersion)) {
+          throw "GitVersion did not provide GITVERSION_SEMVER."
+        }
+
+        "PKG_VERSION=$packageVersion" >> $env:GITHUB_ENV
+
+        Write-Host "Git ref: $env:GITHUB_REF"
+        Write-Host "Package version: $packageVersion"
+        Write-Host "GitVersion SHA: $env:GITVERSION_SHA"
+
+    # Install the SDKs used by the repository's current libraries.
+    # .NET 10 can also build projects targeting older supported TFMs,
+    # while .NET 8 is kept available for projects pinned to that SDK family.
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+
+    - name: Locate solution
+      shell: pwsh
+      run: |
+        $solution = Get-ChildItem `
+          -Path "$env:GITHUB_WORKSPACE\Source" `
+          -Recurse `
+          -File |
+          Where-Object {
+            $_.Extension -in ".slnx", ".sln"
+          } |
+          Select-Object -First 1
+
+        if (-not $solution) {
+          throw "No solution file was found below Source."
+        }
+
+        "SOURCE_SOLUTION=$($solution.FullName)" >> $env:GITHUB_ENV
+        Write-Host "Solution: $($solution.FullName)"
+
+    - name: Restore dependencies
+      shell: pwsh
+      run: |
+        dotnet restore "$env:SOURCE_SOLUTION"
+
+    # Build first, but do not generate NuGet packages yet.
+    # The project assemblies must be signed before packaging.
+    - name: Build
+      shell: pwsh
+      run: |
+        dotnet build --no-restore "$env:SOURCE_SOLUTION" -c Release `
+          -p:CompanyName="scotec Software Solutions AB" `
+          -p:Version="$env:PKG_VERSION" `
+          -p:PackageVersion="$env:PKG_VERSION" `
+          -p:InformationalVersion="$env:PKG_VERSION+$env:GITVERSION_SHA" `
+          -p:GeneratePackageOnBuild=false
+
+    # Authenticate to Azure through GitHub OIDC.
+    # The service principal only needs Artifact Signing permissions.
+    - name: Azure login
+      uses: azure/login@v3
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        allow-no-subscriptions: true
+
+    # Find packable Scotec projects and select only their own output assemblies.
+    #
+    # Example:
+    #   Scotec.Extensions.Linq.csproj -> Scotec.Extensions.Linq.dll
+    #
+    # Copy-local dependencies from referenced packages/projects are not selected.
+    # Satellite resource assemblies belonging to those projects are included.
+    - name: Create signing file list
+      shell: pwsh
+      run: |
+        function Get-MsBuildProperty {
+          param(
+            [string] $Project,
+            [string] $Property
+          )
+
+          $output = & dotnet msbuild "$Project" --nologo "-getProperty:$Property" 2>&1
+
+          if ($LASTEXITCODE -ne 0) {
+            $output | ForEach-Object { Write-Host $_ }
+            throw "Could not read MSBuild property '$Property' from '$Project'."
+          }
+
+          $value = $output |
+            ForEach-Object { "$_".Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Select-Object -Last 1
+
+          return "$value".Trim()
+        }
+
+        $sourceRoot = Join-Path $env:GITHUB_WORKSPACE "Source"
+
+        $projects = Get-ChildItem `
+          -Path $sourceRoot `
+          -Recurse `
+          -File `
+          -Filter "*.csproj"
+
+        if (-not $projects) {
+          throw "No projects were found below Source."
+        }
+
+        $files = @()
+        $ownedAssemblyNames = @()
+        $packableProjects = @()
+
+        foreach ($project in $projects) {
+          $isPackable = Get-MsBuildProperty `
+            -Project $project.FullName `
+            -Property "IsPackable"
+
+          if ($isPackable -ne "true") {
+            continue
+          }
+
+          $assemblyName = Get-MsBuildProperty `
+            -Project $project.FullName `
+            -Property "AssemblyName"
+
+          if ([string]::IsNullOrWhiteSpace($assemblyName)) {
+            continue
+          }
+
+          # This repository contains scotec libraries; do not sign unrelated
+          # helper/test projects that may happen to be packable.
+          if (-not $assemblyName.StartsWith("Scotec.", [System.StringComparison]::OrdinalIgnoreCase)) {
+            continue
+          }
+
+          $binDirectory = Join-Path $project.DirectoryName "bin"
+
+          if (-not (Test-Path $binDirectory)) {
+            Write-Host "Skipping $assemblyName - no bin directory found."
+            continue
+          }
+
+          $projectAssemblies = Get-ChildItem `
+            -Path $binDirectory `
+            -Recurse `
+            -File `
+            -Filter "$assemblyName.dll"
+
+          $resourceAssemblies = Get-ChildItem `
+            -Path $binDirectory `
+            -Recurse `
+            -File `
+            -Filter "$assemblyName.resources.dll"
+
+          if (-not $projectAssemblies) {
+            Write-Host "No build output found for packable project $assemblyName."
+            continue
+          }
+
+          $files += $projectAssemblies
+          $files += $resourceAssemblies
+
+          $ownedAssemblyNames += $assemblyName
+          $packableProjects += $project.FullName
+        }
+
+        $files = $files |
+          Where-Object { $_ -ne $null } |
+          Sort-Object FullName -Unique
+
+        $ownedAssemblyNames = $ownedAssemblyNames |
+          Sort-Object -Unique
+
+        $packableProjects = $packableProjects |
+          Sort-Object -Unique
+
+        if (-not $files) {
+          throw "No packable Scotec assemblies were found for signing."
+        }
+
+        $catalog = Join-Path $env:GITHUB_WORKSPACE "signing-files.txt"
+        $assemblyNamesFile = Join-Path $env:GITHUB_WORKSPACE "owned-assembly-names.txt"
+        $projectsFile = Join-Path $env:GITHUB_WORKSPACE "packable-projects.txt"
+
+        $files |
+          ForEach-Object {
+            [System.IO.Path]::GetRelativePath(
+              $env:GITHUB_WORKSPACE,
+              $_.FullName
+            )
+          } |
+          Set-Content $catalog
+
+        $ownedAssemblyNames | Set-Content $assemblyNamesFile
+        $packableProjects | Set-Content $projectsFile
+
+        Write-Host ""
+        Write-Host "Packable projects:"
+        Get-Content $projectsFile
+
+        Write-Host ""
+        Write-Host "Assemblies to sign:"
+        Get-Content $catalog
+
+    - name: Sign assemblies
+      uses: azure/artifact-signing-action@v2
+      with:
+        endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+        signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+        certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+        files-catalog: ${{ github.workspace }}\signing-files.txt
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+
+    - name: Verify signatures
+      shell: pwsh
+      run: |
+        $catalog = Join-Path $env:GITHUB_WORKSPACE "signing-files.txt"
+
+        foreach ($relativePath in Get-Content $catalog) {
+          $file = Join-Path $env:GITHUB_WORKSPACE $relativePath
+          $signature = Get-AuthenticodeSignature $file
+
+          Write-Host "$relativePath : $($signature.Status)"
+
+          if ($signature.Status -ne "Valid") {
+            throw "Invalid signature: $relativePath ($($signature.Status))"
+          }
+        }
+
+    # Pack each project that was identified as a packable Scotec library.
+    # --no-build guarantees that the signed DLLs are used.
+    - name: Pack
+      shell: pwsh
+      run: |
+        $packageDirectory = Join-Path $env:GITHUB_WORKSPACE "localPackages"
+
+        New-Item `
+          -Path $packageDirectory `
+          -ItemType Directory `
+          -Force | Out-Null
+
+        $projectsFile = Join-Path $env:GITHUB_WORKSPACE "packable-projects.txt"
+
+        foreach ($project in Get-Content $projectsFile) {
+          Write-Host ""
+          Write-Host "Packing: $project"
+
+          dotnet pack --no-build "$project" -c Release `
+            -p:CompanyName="scotec Software Solutions AB" `
+            -p:Version="$env:PKG_VERSION" `
+            -p:PackageVersion="$env:PKG_VERSION" `
+            -p:InformationalVersion="$env:PKG_VERSION+$env:GITVERSION_SHA" `
+            -p:PackageOutputPath="$packageDirectory"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packing failed for '$project'."
+          }
+        }
+
+    # Verify that the project-owned assemblies inside the generated NuGet
+    # packages still carry valid Authenticode signatures.
+    - name: Verify package assemblies
+      shell: pwsh
+      run: |
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+        $packageDirectory = Join-Path $env:GITHUB_WORKSPACE "localPackages"
+
+        $packages = Get-ChildItem `
+          -Path $packageDirectory `
+          -File `
+          -Filter "*.nupkg"
+
+        if (-not $packages) {
+          throw "No NuGet packages were created."
+        }
+
+        $ownedAssemblyNames = Get-Content `
+          (Join-Path $env:GITHUB_WORKSPACE "owned-assembly-names.txt")
+
+        $verifiedAssemblies = 0
+
+        foreach ($package in $packages) {
+          Write-Host ""
+          Write-Host "Checking package: $($package.Name)"
+
+          $extractPath = Join-Path `
+            $env:RUNNER_TEMP `
+            ([System.IO.Path]::GetRandomFileName())
+
+          [System.IO.Compression.ZipFile]::ExtractToDirectory(
+            $package.FullName,
+            $extractPath
+          )
+
+          $packageDlls = Get-ChildItem `
+            -Path $extractPath `
+            -Recurse `
+            -File `
+            -Filter "*.dll"
+
+          foreach ($assembly in $packageDlls) {
+            $isOwnedAssembly = $false
+
+            foreach ($assemblyName in $ownedAssemblyNames) {
+              if ($assembly.Name -ieq "$assemblyName.dll" -or
+                  $assembly.Name -ieq "$assemblyName.resources.dll") {
+                $isOwnedAssembly = $true
+                break
+              }
+            }
+
+            if (-not $isOwnedAssembly) {
+              continue
+            }
+
+            $signature = Get-AuthenticodeSignature $assembly.FullName
+
+            Write-Host "  $($assembly.Name): $($signature.Status)"
+
+            if ($signature.Status -ne "Valid") {
+              throw "Invalid signature in $($package.Name): $($assembly.Name)"
+            }
+
+            $verifiedAssemblies++
+          }
+
+          Remove-Item $extractPath -Recurse -Force
+        }
+
+        if ($verifiedAssemblies -eq 0) {
+          throw "No project-owned assemblies were found in the generated NuGet packages."
+        }
+
+        Write-Host ""
+        Write-Host "Successfully verified $verifiedAssemblies signed package assemblies."
+
+
+  # ---------------------------------------------------------------------------
+  # Release
+  #
+  # Manual build from a tag.
+  #
+  # Azure federated credential:
+  #   Entity type: Environment
+  #   Environment: release
+  #
+  # Every release tag uses the same OIDC identity.
+  # ---------------------------------------------------------------------------
+
+  release:
+    name: Release
+
+    if: startsWith(github.ref, 'refs/tags/')
+
+    runs-on: windows-2025
+
+    environment: release
+
+    steps: *build_steps

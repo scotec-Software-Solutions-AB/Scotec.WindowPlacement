@@ -1,0 +1,13 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="WindowPlacement.Sample.Avalonia.MainWindow"
+        Title="Window Placement Sample (Avalonia)" Width="590" Height="300"
+        WindowStartupLocation="CenterScreen">
+    <StackPanel Margin="24">
+        <TextBlock Text="Monitor-aware window placement" FontSize="19" FontWeight="SemiBold" Margin="0,0,0,14" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,18"
+                   Text="Open the dialog, move it to a different monitor and resize it. Close and reopen it to restore its position. Try monitors with different scaling." />
+        <Button Content="Open dialog" Width="140" Height="36" Click="OpenDialog_Click" />
+        <TextBlock x:Name="Status" TextWrapping="Wrap" Margin="0,18,0,0" />
+    </StackPanel>
+</Window>
