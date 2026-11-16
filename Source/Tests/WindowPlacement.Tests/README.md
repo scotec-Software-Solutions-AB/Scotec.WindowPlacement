@@ -20,7 +20,7 @@ On success it prints `All placement resolver and DPI context checks passed.`
 - Oversized fixed-size window keeps its size and is centered.
 - Work-area offset such as a taskbar.
 - Interface-path identity beating a reassigned GDI name, and a conflicting name rejected in favor of geometry fallback.
-- Legacy placements without `MonitorDevicePath`, and an unavailable interface path falling back to geometry.
+- Placements without `MonitorDevicePath`, and an unavailable interface path falling back to geometry.
 - The saved placement is never mutated by resolution.
 - `Win32MonitorProvider.GetMonitors()` leaves the thread's DPI-awareness context unchanged (Windows only; skipped elsewhere).
 

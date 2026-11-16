@@ -31,13 +31,18 @@ ResolvedWindowPlacement resolved = service.GetPlacement(
 service.ApplyPlacement(hwnd, resolved);
 ```
 
-For WPF or Avalonia windows, use the adapter packages `Scotec.WindowPlacement.Wpf` or `Scotec.WindowPlacement.Avalonia` instead of `ApplyPlacement`.
+`GetPlacement` takes an optional `hwnd`. When it is non-zero, the window's current `WS_THICKFRAME` style decides whether it is treated as resizable; when it is `0` (the default), the `IsResizable` value stored in the saved placement is used.
+
+For WPF or Avalonia windows, use the adapter projects `Scotec.WindowPlacement.Wpf` or `Scotec.WindowPlacement.Avalonia` instead of `ApplyPlacement`.
 
 ## Coordinate systems
 
 - **Saved** (`SavedWindowPlacement.BoundsDip`): DIPs (96 per inch), relative to the saved monitor's work-area origin. The monitor snapshot itself (`BoundsPixels`, `WorkAreaPixels`) is in physical virtual-screen pixels.
 - **Resolved** (`ResolvedWindowPlacement.BoundsPixels`): absolute physical virtual-desktop pixels. Origins can be negative for monitors left of or above the primary monitor.
-- The normal (restored) rectangle is saved even if the window is maximized. `IsMaximized` is stored separately. A window that was maximized and then minimized (`WPF_RESTORETOMAXIMIZED`) is saved as maximized; other minimized windows are saved as normal, and the minimized state itself is never saved. A monitor with a zero DPI (custom `IMonitorProvider`) is rejected: `GetCurrentPlacement` throws `InvalidOperationException` and the resolver throws `ArgumentException`. For a maximized or minimized window the owning monitor is queried with `MonitorFromWindow`, because a minimized window's rectangle is off-screen.
+- The normal (restored) rectangle is saved even if the window is maximized. `IsMaximized` is stored separately.
+- A window that was maximized and then minimized (`WPF_RESTORETOMAXIMIZED`) is saved as maximized; other minimized windows are saved as normal, and the minimized state itself is never saved.
+- For a maximized or minimized window the owning monitor is queried with `MonitorFromWindow`, because a minimized window's rectangle is off-screen.
+- A monitor that reports a zero DPI (possible with a custom `IMonitorProvider`) is rejected: `GetCurrentPlacement` throws `InvalidOperationException` and the resolver throws `ArgumentException`.
 
 ## Monitor matching
 
@@ -54,7 +59,7 @@ Names and interface paths can change with RDP, virtual machines, docking, driver
 
 ## Serialization compatibility
 
-`MonitorSnapshot.MonitorDevicePath` is optional. Placements saved without it still deserialize and use name and geometry matching.
+`MonitorSnapshot.MonitorDevicePath` is optional (`null`) because the interface path cannot always be obtained. A snapshot without it, for example one persisted by a consumer that omits the property, still deserializes and uses name and geometry matching. The library itself does not read or write JSON; serialization is left to the caller.
 
 ## DPI awareness and threading
 

@@ -193,7 +193,7 @@ public static class WindowPlacementResolver
 
 		// Name match. If both sides know an interface path, the paths must also agree; this rejects
 		// a name that Windows has reassigned to a different physical monitor. A missing path on either
-		// side (legacy data, VM/RDP) leaves the name as the only available identity.
+		// side (path unavailable, e.g. VM/RDP, or a snapshot created without it) leaves the name as the only available identity.
 		var byName = available.Where(m =>
 								  string.Equals(saved.DeviceName, m.DeviceName, StringComparison.OrdinalIgnoreCase) &&
 								  (string.IsNullOrWhiteSpace(saved.MonitorDevicePath) ||

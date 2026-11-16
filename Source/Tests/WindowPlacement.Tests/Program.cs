@@ -59,10 +59,10 @@ internal static class Program
             Assert(conflict is { UsedFallbackMonitor: true, Monitor.MonitorDevicePath: "MONITOR#B" },
                 "Conflicting interface path rejects false GDI name match");
 
-            // Old JSON has no MonitorDevicePath. It still uses the GDI name.
+            // A saved snapshot without MonitorDevicePath still uses the GDI name.
             var legacy = WindowPlacementResolver.Resolve(saved, [first, second, third], true);
             Assert(legacy.Monitor.DeviceName == "DISPLAY3" && !legacy.UsedFallbackMonitor,
-                "Legacy placements still use GDI name matching");
+                "Placements without MonitorDevicePath still use GDI name matching");
 
             // An old interface path may disappear under RDP; geometric recovery still works.
             var noPath = WindowPlacementResolver.Resolve(identitySaved,

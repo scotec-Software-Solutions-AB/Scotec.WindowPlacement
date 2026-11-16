@@ -32,8 +32,9 @@ public sealed record MonitorSnapshot
     /// <summary>
     ///     Optional Windows monitor interface path (GUID_DEVINTERFACE_MONITOR) obtained
     ///     using EnumDisplayDevices with EDD_GET_DEVICE_INTERFACE_NAME. When available this is
-    ///     preferred over the GDI display name, which Windows can reassign. Older serialized
-    ///     placements without this property remain valid and use legacy matching.
+    ///     preferred over the GDI display name, which Windows can reassign. The value is
+    ///     <see langword="null" /> when the path cannot be obtained (for example RDP or virtual monitors) or was not
+    ///     supplied; the resolver then matches by display name and geometry.
     /// </summary>
     public string? MonitorDevicePath { get; init; }
 
